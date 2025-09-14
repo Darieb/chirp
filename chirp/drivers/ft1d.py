@@ -32,45 +32,7 @@ from chirp import util
 
 LOG = logging.getLogger(__name__)
 
-MEM_FORMAT = """
-// Memory: memory-flags structure used in FT-xD
-struct flagslot {
-  u8 nosubvfo:1,
-     unknown:3,
-     pskip:1,
-     skip:1,
-     used:1,
-     valid:1;
-};
-
-// Memory: memory structure used in FT-xD
-struct memslot {
-  u8 unknown0:2,
-     mode_alt:1,  // mode for FTM-3200D
-     clock_shift:1,
-     unknown1:4;
-  u8 mode:2,
-     duplex:2,
-     tune_step:4;
-  bbcd freq[3];
-  u8 power:2,
-     digmode:2,   // 0=Analog, 1=AMS, 2=DN, 3=VW
-     tone_mode:4;
-  u16 charsetbits;
-  char label[16];
-  bbcd offset[3];
-  u8 unknown5:2,
-     tone:6;
-  u8 unknown6:1,
-     dcs:7;
-  u16 unknown7;
-  u8 unknown8:2,
-     att:1,
-     autostep:1,
-     automode:1,
-     unknown9:3;
-};
-
+SETTINGS_FORMAT = """
 // Settings
 #seekto 0x047E;
 struct {
@@ -227,12 +189,55 @@ struct {
   u8 unknown[2];
   u8 name[16];
 } bank_info[24];
+"""
 
-// Memory
+MEM_FORMAT = """
+// This FORMAT is used in FT-xD, FTM-3200D and FTM-7250D
+// It relies on defined integer for memnum (number of memories)
+// Memory: memory-flags structure used in Yaesu FT-xD, et. al.
+struct flagslot {
+  u8 nosubvfo:1,
+     unknown:3,
+     pskip:1,
+     skip:1,
+     used:1,
+     valid:1;
+};
+
+// Memory: memory structure used in FT-xD
+struct memslot {
+  u8 unknown0:2,
+     mode_alt:1,  // mode for FTM-3200D
+     clock_shift:1,
+     unknown1:4;
+  u8 mode:2,
+     duplex:2,
+     tune_step:4;
+  bbcd freq[3];
+  u8 power:2,
+     digmode:2,   // 0=Analog, 1=AMS, 2=DN, 3=VW
+     tone_mode:4;
+  u16 charsetbits;
+  char label[16];
+  bbcd offset[3];
+  u8 unknown5:2,
+     tone:6;
+  u8 unknown6:1,
+     dcs:7;
+  u16 unknown7;
+  u8 unknown8:2,
+     att:1,
+     autostep:1,
+     automode:1,
+     unknown9:3;
+};
+
+// Memory       n.b., Unneeded for FTM-3200 and FTM-7250, but needs memslot
 #seekto 0x10CA;
 struct memslot Home[11];
 
-// Settings
+// Settings     n.b., these are unused in FTM-3200 and FTM-7250,
+//              But are needed for spacing!
 #seekto 0x154A;
 // These "channels" seem to actually be a structure:
 //  first five bits are flags
@@ -257,7 +262,9 @@ struct flagslot flagPMS[100];
 struct memslot memory[%(memnum)d];
 struct memslot Skip[99];
 struct memslot PMS[100];
+"""
 
+DIGITAL_FORMAT = """
 // APRS
 #seekto 0xBECA;
 struct {
@@ -507,7 +514,9 @@ struct {
         } Rooms[20];
     } RoomsPerCategory[5];
 } WiresX_settings;
+"""
 
+CHECKSUM_FORMAT = """
 // Checksum
 #seekto 0x1FDC9;
 u8 checksum;
@@ -905,7 +914,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         return rp
 
     def process_mmap(self):
-        self._memobj = bitwise.parse(MEM_FORMAT % self._mem_params, self._mmap)
+        _mf = SETTINGS_FORMAT + MEM_FORMAT + DIGITAL_FORMAT + CHECKSUM_FORMAT
+        self._memobj = bitwise.parse(_mf % self._mem_params, self._mmap)
 
     def get_features(self):
         rf = chirp_common.RadioFeatures()
