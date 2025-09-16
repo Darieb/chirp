@@ -33,6 +33,11 @@ from chirp import util
 LOG = logging.getLogger(__name__)
 
 SETTINGS_FORMAT = """
+// to support SD-card reading
+struct {
+    char a[32];
+    } firstbytes[0x20];
+
 // Settings
 #seekto 0x047E;
 struct {
@@ -878,7 +883,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
               "every 2 minutes", "every 3 minutes", "every 4 minutes",
               "every 5 minutes", "every 6 minutes", "every 7 minutes",
               "every 8 minutes", "every 9 minutes", "every 10 minutes")
-    _BEEP_SELECT = ("Off", "Key+Scan", "Key")
     _SQUELCH = ["%d" % x for x in range(0, 16)]
     _VOLUME = ["%d" % x for x in range(0, 33)]
     _DG_ID = ["%d" % x for x in range(0, 100)]
