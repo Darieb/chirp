@@ -35,8 +35,8 @@ LOG = logging.getLogger(__name__)
 SETTINGS_FORMAT = """
 // to support SD-card reading
 struct {
-    char a[32];
-    } firstbytes[0x20];
+    char a[16];
+    } firstbytes[0x40];
 
 // Settings
 #seekto 0x047E;
@@ -725,7 +725,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     VENDOR = "Yaesu"
     MODEL = "FT-1D"
     VARIANT = "R"
-    FORMATS = [directory.register_format('FT1D ADMS-6', '*.ft1d')]
+    FORMATS = [directory.register_format('FT1D ADMS-6', '*.ft1d'),
+               directory.register_format('Yaesu SD-CARD', '*BACKUP.dat')]
     class_specials = SPECIALS
     _model = b"AH44M"
     _memsize = 130507
@@ -740,6 +741,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     _has_vibrate = False
     _has_af_dual = True
     _adms_ext = '.ft1d'
+    _sdcd_ext = 'BACKUP.dat'
 
     _SG_RE = re.compile(r"(?P<sign>[-+NESW]?)(?P<d>[\d]+)[\s\.,]*"
                         r"(?P<m>[\d]*)[\s\']*(?P<s>[\d]*)")
@@ -895,6 +897,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     @classmethod
     def match_model(cls, filedata, filename):
         if filename.endswith(cls._adms_ext):
+            return True
+        elif filename.endswith(cls._sdcd_ext):
             return True
         else:
             return super().match_model(filedata, filename)
@@ -2567,7 +2571,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
 
         setattr(obj, "lon_dec_sec", val)
 
-    def load_mmap(self, filename):
+    def load_mmap(self, filename: str) -> None:
+        """ Read raw image from file """
         if filename.lower().endswith(self._adms_ext):
             with open(filename, 'rb') as f:
                 self._adms_header = f.read(0x16)
@@ -2576,10 +2581,18 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                 self._mmap = memmap.MemoryMapBytes(self._model + f.read())
                 LOG.info('Loaded ADMS file')
             self.process_mmap()
+        elif filename.endswith(self._sdcd_ext):
+            with open(filename, 'rb') as f:
+                self._sdcd_header = f.read(0x16)
+                self._mmap = memmap.MemoryMapBytes(f.read())
+            self.process_mmap()
         else:
             chirp_common.CloneModeRadio.load_mmap(self, filename)
 
-    def save_mmap(self, filename):
+    def save_mmap(self, filename: str) -> None:
+        """ Write raw image to file.
+            Presently requires to have read from same filetype
+        """
         if filename.lower().endswith(self._adms_ext):
             if not hasattr(self, '_adms_header'):
                 raise Exception('Unable to save .img to %s' % self._adms_ext)
@@ -2587,5 +2600,11 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                 f.write(self._adms_header)
                 f.write(self._mmap.get_packed()[5:])
                 LOG.info('Wrote file')
+        elif filename.endswith(self._sdcd_ext):
+            if not hasattr(self, '_sdcd_header'):
+                raise Exception('Unable to save .img to %s' % self._sdcd_ext)
+            with open(filename, 'wb') as f:
+                f.write(self._sdcd_header)
+                f.write(self._mmap.get_packed())
         else:
             chirp_common.CloneModeRadio.save_mmap(self, filename)
