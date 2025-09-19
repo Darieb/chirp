@@ -1905,18 +1905,18 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         # WiresX settings
         wxc = self._memobj.WiresX_settings
         for i in range(5):
-            cname = f"WiresX_settings.Category[{i}].name"
-            c = str(wxc.Category[i].name).rstrip('\xff').ljust(16)
-            val = RadioSettingValueString(0, 16, c)
-            rs = RadioSetting(cname, f"Category {i+1: 2d} Name", val)
-            WXmenu.append(rs)
-
             WXCmenu = RadioSettingSubGroup(
                         f"WiresX_settings.Category[{i}].RoomsPerCategory",
                         f"Category{i + 1} Rooms")
             WXmenu.append(WXCmenu)
-
             r = wxc.RoomsPerCategory[i]
+
+            cname = f"WiresX_settings.Category[{i}].name"
+            c = str(wxc.Category[i].name).rstrip('\xff').ljust(16)
+            val = RadioSettingValueString(0, 16, c)
+            rs = RadioSetting(cname, f"Category {i+1: 2d} Name", val)
+            WXCmenu.append(rs)
+
             for j in range(20):
                 cn = str(r.Rooms[j].name).strip('\xff').ljust(16)
                 val = RadioSettingValueString(0, 16, cn)
