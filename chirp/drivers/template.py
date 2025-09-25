@@ -15,6 +15,10 @@
 
 from chirp import chirp_common, memmap
 from chirp import bitwise
+from chirp import directory
+from chirp.settings import RadioSetting, RadioSettings, \
+    RadioSettingGroup, RadioSettingSubGroup, \
+    RadioSettingValueBoolean
 
 # Here is where we define the memory map for the radio. Since
 # We often just know small bits of it, we can use #seekto to skip
@@ -67,7 +71,7 @@ def do_upload(radio):
 
 
 # Uncomment this to actually register this radio in CHIRP
-# @directory.register
+@directory.register
 class TemplateRadio(chirp_common.CloneModeRadio):
     """Acme Template"""
     VENDOR = "Acme"     # Replace this with your vendor
@@ -75,12 +79,12 @@ class TemplateRadio(chirp_common.CloneModeRadio):
     BAUD_RATE = 9600    # Replace this with your baud rate
 
     # All new drivers should be "Byte Clean" so leave this in place.
-
     # Return information about this radio's features, including
     # how many memories it has, what bands it supports, etc
     def get_features(self):
         rf = chirp_common.RadioFeatures()
         rf.has_bank = False
+        rf.has_settings = True
         rf.memory_bounds = (0, 9)  # This radio supports memories 0-9
         rf.valid_bands = [(144000000, 148000000),  # Supports 2-meters
                           (440000000, 450000000),  # Supports 70-centimeters
@@ -134,3 +138,48 @@ class TemplateRadio(chirp_common.CloneModeRadio):
         # Convert to low-level frequency representation
         _mem.freq = mem.freq
         _mem.name = mem.name.ljust(8)[:8]  # Store the alpha tag
+
+    def gs1(self) -> RadioSettingGroup:
+        menu = RadioSettingGroup('gs1', 'Group 1')
+        rs = RadioSettingSubGroup('first part', 'First Part')
+        menu.append(rs)
+        val = RadioSettingValueBoolean(self.bar[0])
+        rs = RadioSetting('bar[0]', 'bar value 0', val)
+        rs.set_doc('This is text for bar[0]')
+        menu.append(rs)
+        val = RadioSettingValueBoolean(self.bar[2])
+        rs = RadioSetting('bar[2]', 'bar value 2', val)
+        rs.set_doc('This is test for bar[2]')
+        menu.append(rs)
+
+        rs = RadioSettingSubGroup('second part', 'Second Part')
+        menu.append(rs)
+        return menu
+
+    def gs2(self) -> RadioSettingGroup:
+        menu = RadioSettingGroup('gs2', 'Group 2')
+        val = RadioSettingValueBoolean(self.foo[0])
+        rs = RadioSetting('Foo[0]', 'Foo value 0', val)
+        rs.set_doc('This is test for foo[0]')
+        menu.append(rs)
+        val = RadioSettingValueBoolean(self.foo[1])
+        rs = RadioSetting('Foo[1]', 'Foo value 1', val)
+        rs.set_doc('This is test for foo[1]')
+        menu.append(rs)
+        val = RadioSettingValueBoolean(self.foo[2])
+        rs = RadioSetting('Foo[2]', 'Foo value 2', val)
+        rs.set_doc('This is test for foo[2]')
+        menu.append(rs)
+
+        return menu
+
+    def gs3(self) -> RadioSettingGroup:
+        menu = RadioSettingGroup('gs3', 'Group 3')
+        menu.set_doc('This is settings-group 3 of three total.')
+        return menu
+    
+    def get_settings(self) -> RadioSettings:
+        self.foo = [True, False, True]
+        self.bar = [True, True, False, False]
+        return RadioSettings(self.gs1(), self.gs2(), self.gs3())
+
