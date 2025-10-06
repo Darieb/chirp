@@ -57,7 +57,7 @@ YAESU_PRESETS = {
 def do_download(radio):
     """This is your download function"""
     # NOTE: Remove this in your real implementation!
-    return memmap.MemoryMapBytes(b"\x00" * 1000)
+    return memmap.MemoryMapBytes(b"\x00" * 20000)
 
     # Get the serial port connection
     serial = radio.pipe
@@ -66,7 +66,7 @@ def do_download(radio):
     # from the serial port. Do that one byte at a time and
     # store them in the memory map
     data = b""
-    for _i in range(0, 1000):
+    for _i in range(0, 20000):
         data += serial.read(1)
 
     return memmap.MemoryMapBytes(data)
@@ -83,7 +83,7 @@ def do_upload(radio):
     # Our fake radio is just a simple upload of 1000 bytes
     # to the serial port. Do that one byte at a time, reading
     # from our memory map
-    for i in range(0, 1000):
+    for i in range(0, 20000):
         serial.write(radio.get_mmap()[i])
 
 class TemplateBankModel(chirp_common.BankModel,
@@ -129,7 +129,6 @@ class TemplateRadio(chirp_common.CloneModeRadio):
 
     def __init__(self, pipe) -> None:
         super().__init__(pipe)
-        self._oldnum = -1
 
     def get_bank_model(self) -> chirp_common.BankModel:
         ''' Returns an appropriate list of MappingModel objects '''
@@ -140,7 +139,7 @@ class TemplateRadio(chirp_common.CloneModeRadio):
     def get_features(self):
         rf = chirp_common.RadioFeatures()
         rf.has_bank = True
-        rf.memory_bounds = (0, 9)  # This radio supports memories 0-9
+        rf.memory_bounds = (0, 10-1)  # This radio supports memories 0-9
         rf.valid_bands = [(144000000, 148000000),  # Supports 2-meters
                           (440000000, 450000000),  # Supports 70-centimeters
                           ]
@@ -176,15 +175,14 @@ class TemplateRadio(chirp_common.CloneModeRadio):
             mem.name = YAESU_PRESETS[number][1]
             mem.mode = YAESU_PRESETS[number][3]
             mem.comment = YAESU_PRESETS[number][6]
-            self._oldnum += 1
-            mem.number = self._oldnum
+            mem.number = list(YAESU_PRESETS.keys()).index(number) + 1000
             mem.extd_number = number
             mem.immutable = ['freq', 'name', 'number', 'extd_number',
                              'comment', 'empty', 'skip']
+            print(f'get_memory: {number}, {mem.number}')
             return mem
         # number is a number    
         mem.number = number                 # Set the memory number
-        self._oldnum = max(self._oldnum, number)
         # Get a low-level memory object mapped to the image
         _mem = self._memobj.memory[number]
 
