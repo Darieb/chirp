@@ -9,8 +9,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: CHIRP\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-09-06 16:03+0200\n"
-"PO-Revision-Date: 2025-09-08 11:18+0200\n"
+"POT-Creation-Date: 2025-10-08 15:51-0700\n"
+"PO-Revision-Date: 2025-09-21 08:20+0200\n"
 "Last-Translator: Giovanni Scafora IK5TWZ <scafora.giovanni@gmail.com>\n"
 "Language-Team: CHIRP Italian Translation\n"
 "Language: it\n"
@@ -101,7 +101,7 @@ msgstr ""
 "4. Accendi la radio\n"
 "5. Premi e rilascia il PTT 3 volte mentre tieni premuto il tasto MONI\n"
 "6. Velocità di trasmissione supportate: 57600 (predefinito) e 19200\n"
-"   (per cambiare, ruotare il selettore, tenendo premuto MONI)\n"
+"   (per cambiare, ruota il selettore, tenendo premuto MONI)\n"
 "7. Fai clic su OK\n"
 
 #: ../drivers/ft2900.py:1253
@@ -807,7 +807,7 @@ msgid ""
 "6. Click OK to download image from device.\n"
 msgstr ""
 "1. Spegni la radio.\n"
-"2. Collega il cavo al connettore microfono/spkr.\n"
+"2. Collega il cavo al connettore mic/spkr.\n"
 "3. Assicurati che il connettore sia saldamente collegato.\n"
 "4. Accendi la radio (potrebbe essere necessario impostare il volume al 100%).\n"
 "5. Assicurati che la radio sia sintonizzata su un canale privo di attività.\n"
@@ -823,7 +823,7 @@ msgid ""
 "6. Click OK to upload image to device.\n"
 msgstr ""
 "1. Spegni la radio.\n"
-"2. Collega il cavo al connettore microfono/spkr.\n"
+"2. Collega il cavo al connettore mic/spkr.\n"
 "3. Assicurati che il connettore sia saldamente collegato.\n"
 "4. Accendi la radio (potrebbe essere necessario impostare il volume al 100%).\n"
 "5. Assicurati che la radio sia sintonizzata su un canale privo di attività.\n"
@@ -839,7 +839,7 @@ msgid ""
 "6. Click OK to download image from device.\n"
 msgstr ""
 "1. Spegni la radio.\n"
-"2. Collega il cavo al connettore microfono/spkr.\n"
+"2. Collega il cavo al connettore mic/spkr.\n"
 "3. Assicurati che il connettore sia saldamente collegato.\n"
 "4. Accendi la radio.\n"
 "5. Assicurati che la radio sia sintonizzata su un canale privo di attività.\n"
@@ -855,7 +855,7 @@ msgid ""
 "6. Click OK to upload image to device.\n"
 msgstr ""
 "1. Spegni la radio.\n"
-"2. Collega il cavo al connettore microfono/spkr.\n"
+"2. Collega il cavo al connettore mic/spkr.\n"
 "3. Assicurati che il connettore sia saldamente collegato.\n"
 "4. Accendi la radio.\n"
 "5. Assicurati che la radio sia sintonizzata su un canale privo di attività.\n"
@@ -987,7 +987,7 @@ msgid ""
 "It will may not work if you turn on the radio with the cable already attached\n"
 msgstr ""
 "1. Accendi la radio.\n"
-"2. Collega il cavo al connettore microfono/spkr.\n"
+"2. Collega il cavo al connettore mic/spkr.\n"
 "3. Assicurati che il connettore sia saldamente collegato.\n"
 "4. Fai clic su OK, per scaricare l'immagine dal dispositivo.\n"
 "\n"
@@ -1003,7 +1003,7 @@ msgid ""
 "It will may not work if you turn on the radio with the cable already attached"
 msgstr ""
 "1. Accendi la radio.\n"
-"2. Collega il cavo al connettore microfono/spkr.\n"
+"2. Collega il cavo al connettore mic/spkr.\n"
 "3. Assicurati che il connettore sia saldamente collegato.\n"
 "4. Fai clic su OK, per caricare l'immagine sul dispositivo.\n"
 "\n"
@@ -1049,7 +1049,7 @@ msgstr "Inizia sempre con un elenco recente"
 msgid "Amateur"
 msgstr "Radioamatore"
 
-#: ../wxui/bugreport.py:340 ../wxui/bugreport.py:449 ../wxui/common.py:625
+#: ../wxui/bugreport.py:340 ../wxui/bugreport.py:449 ../wxui/common.py:629
 msgid "An error has occurred"
 msgstr "Si è verificato un errore"
 
@@ -1120,7 +1120,7 @@ msgstr "I risultati della cache possono essere inclusi solo per una query di pro
 msgid "Canada"
 msgstr "Canada"
 
-#: ../wxui/common.py:496
+#: ../wxui/common.py:500
 msgid "Changing this setting requires refreshing the settings from the image, which will happen now."
 msgstr "Per modificare questa impostazione è necessario aggiornare le impostazioni dall'immagine, cosa che avverrà ora."
 
@@ -1315,7 +1315,7 @@ msgstr ""
 msgid "DTMF decode"
 msgstr "Decodifica DTMF"
 
-#: ../wxui/memedit.py:2863
+#: ../wxui/memedit.py:2873
 msgid "DV Memory"
 msgstr "Memoria DV"
 
@@ -1356,7 +1356,7 @@ msgstr "Diff memorie raw"
 msgid "Diff against another editor"
 msgstr "Diff rispetto ad un altro editor"
 
-#: ../wxui/memedit.py:2780
+#: ../wxui/memedit.py:2790
 msgid "Digital Code"
 msgstr "Codice digitale"
 
@@ -1431,12 +1431,12 @@ msgstr "Duplex"
 msgid "Edit %i memories"
 msgstr "Modifica %i memorie"
 
-#: ../wxui/memedit.py:2810
+#: ../wxui/memedit.py:2820
 #, python-format
 msgid "Edit details for %i memories"
 msgstr "Modifica i dettagli di %i memorie"
 
-#: ../wxui/memedit.py:2808
+#: ../wxui/memedit.py:2818
 #, python-format
 msgid "Edit details for memory %i"
 msgstr "Modifica i dettagli della memoria %i"
@@ -1559,7 +1559,7 @@ msgstr "Esporta in CSV"
 msgid "Export to CSV..."
 msgstr "Esporta in CSV..."
 
-#: ../wxui/memedit.py:2852
+#: ../wxui/memedit.py:2862
 msgid "Extra"
 msgstr "Extra"
 
@@ -1584,6 +1584,10 @@ msgstr ""
 "Database GRATUITO di ripetitori, che fornisce le\n"
 "informazioni più aggiornate sui ripetitori in Europa.\n"
 "Non è necessario un account."
+
+#: ../wxui/memedit.py:2771
+msgid "Failed to export some memories"
+msgstr ""
 
 #: ../wxui/developer.py:499
 msgid "Failed to load radio browser"
@@ -1718,8 +1722,8 @@ msgstr ""
 "    l'audio del lato destro!\n"
 
 #: ../drivers/mursv1.py:341 ../drivers/baofeng_wp970i.py:327
-#: ../drivers/btech.py:699 ../drivers/gmrsuv1.py:391
-#: ../drivers/tdxone_tdq8a.py:456 ../drivers/uv6r.py:339
+#: ../drivers/btech.py:684 ../drivers/gmrsuv1.py:391
+#: ../drivers/tdxone_tdq8a.py:441 ../drivers/uv6r.py:339
 #: ../drivers/uv5x3.py:417 ../drivers/gmrsv2.py:363
 #: ../drivers/baofeng_uv17Pro.py:496 ../drivers/bf_t1.py:482
 msgid ""
@@ -1825,7 +1829,7 @@ msgstr ""
 "    l'audio del lato destro!\n"
 "6 - Accendi la radio per uscire dalla modalità clone.\n"
 
-#: ../drivers/btech.py:705 ../drivers/bf_t1.py:488
+#: ../drivers/btech.py:690 ../drivers/bf_t1.py:488
 msgid ""
 "Follow these instructions to upload your info:\n"
 "1 - Turn off your radio\n"
@@ -1867,7 +1871,7 @@ msgstr ""
 "3 - Accendi la radio\n"
 "4 - Fai clic su OK per iniziare\n"
 
-#: ../drivers/vgc.py:598 ../drivers/lt725uv.py:496
+#: ../drivers/vgc.py:583 ../drivers/lt725uv.py:481
 msgid ""
 "Follow this instructions to download your info:\n"
 "1 - Turn off your radio\n"
@@ -1895,9 +1899,9 @@ msgstr ""
 "3 - Accendi la radio\n"
 "4 - Effettua il download dei dati dalla radio\n"
 
-#: ../drivers/vgc.py:604 ../drivers/mursv1.py:347
+#: ../drivers/vgc.py:589 ../drivers/mursv1.py:347
 #: ../drivers/baofeng_wp970i.py:333 ../drivers/gmrsuv1.py:397
-#: ../drivers/lt725uv.py:502 ../drivers/tdxone_tdq8a.py:462
+#: ../drivers/lt725uv.py:487 ../drivers/tdxone_tdq8a.py:447
 #: ../drivers/uv6r.py:345 ../drivers/uv5x3.py:423 ../drivers/gmrsv2.py:369
 #: ../drivers/baofeng_uv17Pro.py:502
 msgid ""
@@ -1945,19 +1949,19 @@ msgstr "La frequenza %s non rientra nel range supportato"
 msgid "Frequency granularity in kHz"
 msgstr "Granularità della frequenza in kHz"
 
-#: ../drivers/ga510.py:1072 ../drivers/mml_jc8810.py:1394
-#: ../drivers/tdh8.py:2610 ../drivers/uv5r.py:1940
+#: ../drivers/ga510.py:1072 ../drivers/mml_jc8810.py:1379
+#: ../drivers/tdh8.py:2506 ../drivers/uv5r.py:1940
 #: ../drivers/baofeng_uv17Pro.py:1266
 msgid "Frequency in this range must not be AM mode"
 msgstr "La frequenza in questo intervallo non deve essere in modalità AM"
 
-#: ../drivers/ga510.py:1065 ../drivers/mml_jc8810.py:1391
-#: ../drivers/tdh8.py:2607 ../drivers/uv5r.py:1936
-#: ../drivers/baofeng_uv17Pro.py:1262
+#: ../drivers/ga510.py:1065 ../drivers/radtel_rt900.py:1360
+#: ../drivers/mml_jc8810.py:1376 ../drivers/tdh8.py:2503
+#: ../drivers/uv5r.py:1936 ../drivers/baofeng_uv17Pro.py:1262
 msgid "Frequency in this range requires AM mode"
 msgstr "La frequenza in questo intervallo richiede la modalità AM"
 
-#: ../drivers/tdh8.py:2614
+#: ../drivers/tdh8.py:2510
 msgid "Frequency outside TX bands must be duplex=off"
 msgstr "La frequenza al di fuori delle bande TX deve essere duplex=off"
 
@@ -2079,7 +2083,7 @@ msgstr "Valore non valido"
 msgid "Invalid ZIP code"
 msgstr "Codice postale non valido"
 
-#: ../wxui/memedit.py:1980 ../wxui/memedit.py:2943
+#: ../wxui/memedit.py:1980 ../wxui/memedit.py:2953
 #, python-format
 msgid "Invalid edit: %s"
 msgstr "Modifica non valida: %s"
@@ -2202,7 +2206,7 @@ msgstr "Longitudine"
 #: ../wxui/memedit.py:1993
 #, python-format
 msgid "Manual edit of memory %i"
-msgstr "Modifica manuale della memoria %i"
+msgstr "modifica manuale della memoria %i"
 
 #: ../wxui/main.py:203
 msgid "Memories"
@@ -2260,7 +2264,7 @@ msgstr "Modulo caricato"
 msgid "Module loaded successfully"
 msgstr "Modulo caricato con successo"
 
-#: ../wxui/common.py:641
+#: ../wxui/common.py:645
 msgid "More Info"
 msgstr "Maggiori informazioni"
 
@@ -2343,7 +2347,7 @@ msgid ""
 "TX Freq"
 msgstr ""
 "Offset/\n"
-"TX Freq"
+"Freq TX"
 
 #: ../wxui/memquery.py:252
 #, python-format
@@ -2475,7 +2479,7 @@ msgstr "Password"
 msgid "Paste"
 msgstr "Incolla"
 
-#: ../wxui/common.py:796
+#: ../wxui/common.py:800
 msgid "Paste external memories"
 msgstr "Incolla le memorie esterne"
 
@@ -2704,7 +2708,7 @@ msgstr "Si consiglia di utilizzare 55.2"
 msgid "Redo"
 msgstr "Rifai"
 
-#: ../wxui/common.py:498
+#: ../wxui/common.py:502
 msgid "Refresh required"
 msgstr "Aggiornamento necessario"
 
@@ -3214,7 +3218,7 @@ msgstr "Impossibile eseguire la ricerca"
 msgid "Unable to read last block. This often happens when the selected model is US but the radio is a non-US one (or widebanded). Please choose the correct model and try again."
 msgstr "Impossibile leggere l'ultimo blocco. Questo accade spesso, quando il modello selezionato è US, ma la radio è un modello non US (o widebanded). Scegli il modello corretto e riprova."
 
-#: ../wxui/common.py:693
+#: ../wxui/common.py:697
 #, python-format
 msgid "Unable to reveal %s on this system"
 msgstr "Impossibile rivelare %s su questo sistema"
@@ -3296,12 +3300,12 @@ msgstr "Nome utente"
 msgid "Value does not fit in %i bits"
 msgstr "Il valore non rientra in %i bit"
 
-#: ../wxui/common.py:535
+#: ../wxui/common.py:539
 #, python-format
 msgid "Value must be at least %.4f"
 msgstr "Il valore deve essere almeno %.4f"
 
-#: ../wxui/common.py:539
+#: ../wxui/common.py:543
 #, python-format
 msgid "Value must be at most %.4f"
 msgstr "Il valore deve essere al massimo %.4f"
@@ -3319,7 +3323,7 @@ msgstr "Il valore deve essere maggiore o uguale a zero"
 msgid "Value to search memory field for"
 msgstr "Valore da ricercare nel campo della memoria"
 
-#: ../wxui/memedit.py:2843
+#: ../wxui/memedit.py:2853
 msgid "Values"
 msgstr "Valori"
 
@@ -3331,7 +3335,7 @@ msgstr "Produttore"
 msgid "View"
 msgstr "Visualizza"
 
-#: ../wxui/common.py:483
+#: ../wxui/common.py:487
 msgid "WARNING!"
 msgstr "ATTENZIONE!"
 
