@@ -781,7 +781,7 @@ class FT1Bank(chirp_common.NamedBank):
     """A FT1D bank"""
 
     def get_name(self):
-        _bank = self._model._radio._memobj.bank_info[self.index]
+        _bank = self._model._radio._memobj.bank_info[self.get_index()]
 
         name = ""
         for i in _bank.name:
@@ -791,7 +791,7 @@ class FT1Bank(chirp_common.NamedBank):
         return name.rstrip()
 
     def set_name(self, name):
-        _bank = self._model._radio._memobj.bank_info[self.index]
+        _bank = self._model._radio._memobj.bank_info[self.get_index()]
         _bank.name = [CHARSET.index(x) for x in name.ljust(16)[:16]]
 
 
@@ -805,7 +805,6 @@ class FT1BankModel(chirp_common.BankModel,
         self._bank_mappings = []
         for index, _bank in enumerate(_banks):
             bank = FT1Bank(self, "%i" % index, "BANK-%i" % index)
-            bank.index = index
             self._bank_mappings.append(bank)
 
     def get_bankable_specials(self) -> list:
@@ -823,10 +822,10 @@ class FT1BankModel(chirp_common.BankModel,
 
     def _channel_numbers_in_bank(self, bank: chirp_common.Bank) -> set:
         ''' Returns set of defined channels in specific bank object '''
-        _bank_used = self._radio._memobj.bank_used[bank.index]
+        _bank_used = self._radio._memobj.bank_used[bank.get_index()]
         if _bank_used.in_use == 0xFFFF:
             return set()
-        _members = self._radio._memobj.bank_members[bank.index]
+        _members = self._radio._memobj.bank_members[bank.get_index()]
         _chans = set([int(ch) + 1 for ch in _members.channel if ch != 0xFFFF])
         return _chans
 
@@ -834,9 +833,9 @@ class FT1BankModel(chirp_common.BankModel,
                                           bank: chirp_common.Bank,
                                           channels_in_bank: set) -> None:
         ''' Put identifiers (channels_in_bank) into specific bank object '''
-        _members = self._radio._memobj.bank_members[bank.index]
+        _members = self._radio._memobj.bank_members[bank.get_index()]
         if len(channels_in_bank) > len(_members.channel):
-            raise Exception("Too many entries in bank %d" % bank.index)
+            raise Exception("Too many entries in bank %d" % bank.get_index())
 
         empty = 0
         for index, channel_number in enumerate(sorted(channels_in_bank)):
@@ -853,7 +852,7 @@ class FT1BankModel(chirp_common.BankModel,
         channels_in_bank.add(memory.number)
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
-        _bank_used = self._radio._memobj.bank_used[bank.index]
+        _bank_used = self._radio._memobj.bank_used[bank.get_index()]
         _bank_used.in_use = 0x06
 
     def remove_memory_from_mapping(self,
@@ -869,7 +868,7 @@ class FT1BankModel(chirp_common.BankModel,
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         if not channels_in_bank:
-            _bank_used = self._radio._memobj.bank_used[bank.index]
+            _bank_used = self._radio._memobj.bank_used[bank.get_index()]
             _bank_used.in_use = 0xFFFF
 
     def get_mapping_memories(self, bank: chirp_common.Bank) -> list:
@@ -879,7 +878,7 @@ class FT1BankModel(chirp_common.BankModel,
             memories.append(self._radio.get_memory(channel))
         return memories
 
-    def get_memory_mappings(self, memory: chirp_common.Bank) -> list:
+    def get_memory_mappings(self, memory: chirp_common.Memory) -> list:
         ''' Return list of bank objects that refer to specific CHIRP memory '''
         banks = []
         for bank in self.get_mappings():
@@ -1263,13 +1262,13 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             mem.dtcs = chirp_common.DTCS_CODES[_mem.dcs]
             mem.tuning_step = STEPS[_mem.tune_step]
             mem.power = self._decode_power_level(_mem)
-            self._get_mem_extra(mem, _mem)
+            _b = _mem.digmode == 1
+            self._get_mem_extra(mem, _b)
         return mem
 
-    def _get_mem_extra(self, mem: chirp_common.Memory, _mem: object | bool):
+    def _get_mem_extra(self, mem: chirp_common.Memory, _d: bool):
         mem.extra = RadioSettingGroup('Extra', 'extra')
-
-        ams = _mem if isinstance(_mem, bool) else _mem.digmode == 1
+        ams = _d
         rs = RadioSetting('ysf_ams', 'AMS mode',
                           RadioSettingValueBoolean(ams))
         mem.extra.append(rs)
