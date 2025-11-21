@@ -863,8 +863,7 @@ class FT1BankModel(chirp_common.BankModel,
         try:
             channels_in_bank.remove(memory.number)
         except KeyError:
-            LOG.warning("Memory {memory.number} is not in {bank}. Ignored.")
-            return
+            raise KeyError(f"Memory {memory.number} is not in {bank}. Ignored.")
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         if not channels_in_bank:
