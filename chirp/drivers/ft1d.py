@@ -23,7 +23,7 @@ import logging
 
 from chirp.drivers import yaesu_clone
 from chirp import chirp_common, directory, bitwise
-from chirp import memmap
+from chirp import memmap, errors
 from chirp.settings import RadioSettingGroup, RadioSetting, RadioSettings, \
             RadioSettingValueInteger, RadioSettingValueString, \
             RadioSettingValueList, RadioSettingValueBoolean, \
@@ -863,7 +863,7 @@ class FT1BankModel(chirp_common.BankModel,
         try:
             channels_in_bank.remove(memory.number)
         except KeyError:
-            raise KeyError(f"Memory {memory.number} is not in {bank}. Ignored.")
+            raise KeyError(f"Memory {memory.number} is not in {bank}.")
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         if not channels_in_bank:
@@ -1134,6 +1134,22 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             result.append(str(msg_text).rstrip("\xFF"))
         return result
 
+    def _get_special_indices(self, name: str):
+        '''  Find type of  special memory "name" and index into that memory '''
+        _n = self.MAX_MEM_SLOT
+        for _x in SPECIALS:
+            try:
+                ndx = _x[1].index(name)
+                array = _x[0]
+                break
+            except Exception:
+                _n += len(_x[1])
+        if array is None:
+            raise IndexError(f"Unknown special '{name}'")
+        _n += ndx
+        print(f'_get_special_indices: {array}[{name}], ndx={ndx}, {_n}')
+        return (array, ndx, _n)
+
     def slotloc(self, memref, extref=None):
         '''
         Determine Radio memory location based upon CHIRP memory referenc
@@ -1149,42 +1165,18 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         '''
         array = None
         num = memref
-        ename = ""
+        name = ""
         mstr = isinstance(memref, str)
         specials = ALLNAMES
         extr = False
         if extref is not None:
             extr = extref in specials
         if mstr or extr:        # named special?
-            ename = memref
-            num = self.MAX_MEM_SLOT + 1
-            # num = -1
-            sname = memref if mstr else extref
-            # Find name of appropriate memory and index into that memory
-            for x in self.class_specials:
-                try:
-                    ndx = x[1].index(sname)
-                    array = x[0]
-                    break
-                except Exception:
-                    num += len(x[1])
-                    # num -= len(x[1])
-            if array is None:
-                raise IndexError("Unknown special %s" % memref)
-            num += ndx
-            # num -= ndx
+            name = memref if mstr else extref
+            array, ndx, num = self._get_special_indices(name)
         elif memref > self.MAX_MEM_SLOT:         # numbered special
-            ename = extref
-            ndx = memref - (self.MAX_MEM_SLOT + 1)
-            # Find name of appropriate memory and index into that memory
-            # But assumes specials are in reverse-quantity order
-            for x in self.class_specials:
-                if ndx < len(x[1]):
-                    array = x[0]
-                    break
-                ndx -= len(x[1])
-            if array is None:
-                raise IndexError("Unknown memref number %s" % memref)
+            name = extref
+            array, ndx, _num = self._get_special_indices(name)
         else:
             array = "memory"
             ndx = memref - 1
@@ -1197,15 +1189,15 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             _flag = None
         if array == "Presets":
             # Preset _mem is the specific list from YAESU_PRESETS
-            _mem = YAESU_PRESETS[ename]
+            _mem = YAESU_PRESETS[name]
             _flag = None
         else:
             _mem = getattr(self._memobj, array)[ndx]
-        return (_mem, _flag,  ndx, num, array, ename)
+        return (_mem, _flag, num, array, name)
 
     # Build CHIRP version (mem) of radio's memory (_mem)
-    def get_memory(self, number):
-        _mem, _flag, ndx, num, array, ename = self.slotloc(number)
+    def get_memory(self, number: int | str) -> chirp_common.Memory:
+        _mem, _flag, num, array, ename = self.slotloc(number)
         mem = chirp_common.Memory()
         mem.number = num
         if array == "Home":
@@ -1224,7 +1216,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             mem.duplex = _mem[4]
             mem.offset = _mem[5]
             mem.comment = _mem[6]
-            mem.immutable += ["empty", "number", "extd_number", "freq",
+            mem.immutable += ["empty", "number", "extd_number",
                               'skip', "mode", "duplex", "offset", "comment"]
             self._get_mem_extra(mem, False)
             # No further processing needed for presets
@@ -1370,46 +1362,48 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                             (ndx + 1)))
         return msgs
 
-    # Modify radio's memory (_mem) corresponding to CHIRP version at 'mem'
-    def set_memory(self, mem):
-        _mem, flag, ndx, num, regtype, ename = self.slotloc(mem.number,
-                                                            mem.extd_number)
-        if mem.empty:
+    def set_memory(self, memory: chirp_common.Memory) -> None:
+        ''' Modify radio's memory (_mem) corresponding to CHIRP at "memory" '''
+        _mem, flag, num, regtype, ename = \
+            self.slotloc(memory.number, memory.extd_number)
+        # Enforce no-changes-allowed to Presets specials
+        if regtype == 'Presets':
+            raise errors.RadioError('Cannot change presets.')
+        if memory.empty:
             self._wipe_memory(_mem)
             if flag is not None:
                 flag.used = False
             return
-        _mem.power = self._encode_power_level(mem)
-        _mem.tone = chirp_common.TONES.index(mem.rtone)
-        self._set_tmode(_mem, mem)
-        _mem.dcs = chirp_common.DTCS_CODES.index(mem.dtcs)
-        _mem.tune_step = STEPS.index(mem.tuning_step)
+        _mem.power = self._encode_power_level(memory)
+        _mem.tone = chirp_common.TONES.index(memory.rtone)
+        self._set_tmode(_mem, memory)
+        _mem.dcs = chirp_common.DTCS_CODES.index(memory.dtcs)
+        _mem.tune_step = STEPS.index(memory.tuning_step)
         # duplex "off" is equivalent to "" and may show up in tox test.
-        if mem.duplex is None:
+        if memory.duplex is None:
             _mem.duplex = DUPLEX.index("")
         else:
-            _mem.duplex = DUPLEX.index(mem.duplex)
-        self._set_mode(_mem, mem)
+            _mem.duplex = DUPLEX.index(memory.duplex)
+        self._set_mode(_mem, memory)
         if flag is not None:
-            if mem.freq < 30000000 or \
-                    (mem.freq > 88000000 and mem.freq < 108000000) or \
-                    mem.freq > 580000000:
+            if memory.freq < 30000000 or \
+                    (memory.freq > 88000000 and memory.freq < 108000000) or \
+                    memory.freq > 580000000:
                 flag.nosubvfo = True     # Masked from VFO B
             else:
                 flag.nosubvfo = False    # Available in both VFOs
         if regtype != "Home":
-            self._debank(mem)
-            ndx = num - 1
-            flag.used = not mem.empty
+            self._debank(memory)
+            flag.used = not memory.empty
             flag.valid = True
-            flag.skip = mem.skip == "S"
-            flag.pskip = mem.skip == "P"
-        freq = mem.freq
+            flag.skip = memory.skip == "S"
+            flag.pskip = memory.skip == "P"
+        freq = memory.freq
         _mem.freq = int(freq / 1000)
-        _mem.offset = int(mem.offset / 1000)
-        _mem.label = self._encode_label(mem)
-        _mem.charsetbits = self._encode_charsetbits(mem)
-        self._set_mem_extra(mem, _mem)
+        _mem.offset = int(memory.offset / 1000)
+        _mem.label = self._encode_label(memory)
+        _mem.charsetbits = self._encode_charsetbits(memory)
+        self._set_mem_extra(memory, _mem)
         return
 
     @classmethod
