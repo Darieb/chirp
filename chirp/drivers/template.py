@@ -12,6 +12,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+''' Template.py modified to allow playing with settings.
+    DAR 2025
+    '''
 
 from chirp import chirp_common, memmap
 from chirp import bitwise
@@ -75,8 +78,13 @@ def do_upload(radio):
 class TemplateRadio(chirp_common.CloneModeRadio):
     """Acme Template"""
     VENDOR = "Acme"     # Replace this with your vendor
-    MODEL = "Template"  # Replace this with your model
+    MODEL = "Template Settings"  # Replace this with your model
     BAUD_RATE = 9600    # Replace this with your baud rate
+
+    def __init__(self, port):
+        super().__init__(port)
+        self.foo = []
+        self.oof = []
 
     # All new drivers should be "Byte Clean" so leave this in place.
     # Return information about this radio's features, including
@@ -106,12 +114,12 @@ class TemplateRadio(chirp_common.CloneModeRadio):
 
     # Return a raw representation of the memory object, which
     # is very helpful for development
-    def get_raw_memory(self, number):
+    def get_raw_memory(self, number: int) -> str:
         return repr(self._memobj.memory[number])
 
     # Extract a high-level memory object from the low-level memory map
     # This is called to populate a memory in the UI
-    def get_memory(self, number):
+    def get_memory(self, number: int) -> chirp_common.Memory:
         # Get a low-level memory object mapped to the image
         _mem = self._memobj.memory[number]
 
@@ -131,15 +139,15 @@ class TemplateRadio(chirp_common.CloneModeRadio):
 
     # Store details about a high-level memory to the memory map
     # This is called when a user edits a memory in the UI
-    def set_memory(self, mem):
+    def set_memory(self, memory: chirp_common.Memory):
         # Get a low-level memory object mapped to the image
-        _mem = self._memobj.memory[mem.number]
-
-        # Convert to low-level frequency representation
-        _mem.freq = mem.freq
-        _mem.name = mem.name.ljust(8)[:8]  # Store the alpha tag
+        _mem = self._memobj.memory[memory.number]
+        _mem.freq = memory.freq
+        _mem.name = memory.name.ljust(8)[:8]  # Store the alpha tag
 
     def gs1(self) -> RadioSettingGroup:
+        """ returns RadioSettingGroup for first batch.
+            This should have tooltips """
         menu = RadioSettingGroup('gs1', 'Group 1')
         rs = RadioSettingSubGroup('first part', 'First Part')
         menu.append(rs)
@@ -154,9 +162,13 @@ class TemplateRadio(chirp_common.CloneModeRadio):
 
         rs = RadioSettingSubGroup('second part', 'Second Part')
         menu.append(rs)
+        print(f'gs1: With SubGrouop: {menu}')
         return menu
 
     def gs2(self) -> RadioSettingGroup:
+        """ returns RadioSettingGroup for second batch.
+            This should have tooltips
+            """
         menu = RadioSettingGroup('gs2', 'Group 2')
         val = RadioSettingValueBoolean(self.foo[0])
         rs = RadioSetting('Foo[0]', 'Foo value 0', val)
@@ -170,16 +182,16 @@ class TemplateRadio(chirp_common.CloneModeRadio):
         rs = RadioSetting('Foo[2]', 'Foo value 2', val)
         rs.set_doc('This is test for foo[2]')
         menu.append(rs)
-
+        print(f'gs2: WithOUT SubGrouop: {menu}')
         return menu
 
     def gs3(self) -> RadioSettingGroup:
+        """ returns RadioSettingGroup for third batch """
         menu = RadioSettingGroup('gs3', 'Group 3')
         menu.set_doc('This is settings-group 3 of three total.')
         return menu
-    
+
     def get_settings(self) -> RadioSettings:
         self.foo = [True, False, True]
         self.bar = [True, True, False, False]
         return RadioSettings(self.gs1(), self.gs2(), self.gs3())
-
