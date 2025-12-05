@@ -826,7 +826,7 @@ class FT1BankModel(chirp_common.BankModel,
         if _bank_used.in_use == 0xFFFF:
             return set()
         _members = self._radio._memobj.bank_members[bank.get_index()]
-        _chans = set([int(ch) + 1 for ch in _members.channel if ch != 0xFFFF])
+        _chans = set(int(ch) + 1 for ch in _members.channel if ch != 0xFFFF)
         return _chans
 
     def _update_bank_with_channel_numbers(self,
@@ -839,7 +839,9 @@ class FT1BankModel(chirp_common.BankModel,
 
         empty = 0
         for index, channel_number in enumerate(sorted(channels_in_bank)):
-            _members.channel[index] = channel_number - 1
+            # Use channel_number for presets, channel_number - 1 for the rest
+            _members.channel[index] = channel_number - \
+                1 if channel_number & 0x7000 == 0 else 0
             empty = index + 1
         for index in range(empty, len(_members.channel)):
             _members.channel[index] = 0xFFFF
@@ -1147,7 +1149,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         if array is None:
             raise IndexError(f"Unknown special '{name}'")
         _n += ndx
-        print(f'_get_special_indices: {array}[{name}], ndx={ndx}, {_n}')
         return (array, ndx, _n)
 
     def slotloc(self, memref, extref=None):
