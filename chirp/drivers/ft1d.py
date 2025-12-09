@@ -852,6 +852,8 @@ class FT1BankModel(chirp_common.BankModel,
         ''' Add identified CHIRP Memory to specific bank object '''
         channels_in_bank = self._channel_numbers_in_bank(bank)
         channels_in_bank.add(memory.number)
+        print(f'add_memory: {memory.number}, {bank}, '
+              f'{channels_in_bank}')
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         _bank_used = self._radio._memobj.bank_used[bank.get_index()]
@@ -862,10 +864,13 @@ class FT1BankModel(chirp_common.BankModel,
                                    bank: chirp_common.Bank) -> None:
         ''' Remove specific CHIRP memory from specific bank object '''
         channels_in_bank = self._channel_numbers_in_bank(bank)
+        print(f'remove_memory: {memory.number}, {bank}, '
+              f'{channels_in_bank}')
         try:
             channels_in_bank.remove(memory.number)
-        except KeyError:
-            raise KeyError(f"Memory {memory.number} is not in {bank}.")
+        except KeyError as error:
+            raise errors.RadioError(
+                f"Memory {memory.number} is not in {bank}.") from error
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         if not channels_in_bank:
@@ -877,6 +882,7 @@ class FT1BankModel(chirp_common.BankModel,
         memories = []
         for channel in self._channel_numbers_in_bank(bank):
             memories.append(self._radio.get_memory(channel))
+        print(f'get_mapping: {bank} {memories}')
         return memories
 
     def get_memory_mappings(self, memory: chirp_common.Memory) -> list:
@@ -897,7 +903,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     MODEL = "FT-1D"
     VARIANT = "R"
     FORMATS = [directory.register_format('FT1D ADMS-6', '*.ft1d')]
-    class_specials = SPECIALS
     _model = b"AH44M"
     _memsize = 130507
     _block_lengths = [10, 130497]
