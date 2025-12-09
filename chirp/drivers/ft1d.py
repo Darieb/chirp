@@ -1215,7 +1215,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             # read data from specific YAESU_PRESETS (from slotloc as _mem)
             mem.empty = False
             mem.extd_number = ename
-            mem.number = _mem[0]
+            # DAR mem.number = _mem[0]
             mem.name = _mem[1]
             mem.freq = _mem[2]
             mem.mode = _mem[3]
