@@ -800,7 +800,7 @@ class FT1BankModel(chirp_common.BankModel,
     """A FT1D bank model"""
 
     def __init__(self, radio, name='Banks'):
-        super(FT1BankModel, self).__init__(radio, name)
+        super().__init__(radio, name)
         _banks = self._radio._memobj.bank_info
         self._bank_mappings = []
         for index, _bank in enumerate(_banks):
@@ -821,13 +821,25 @@ class FT1BankModel(chirp_common.BankModel,
         return self._bank_mappings
 
     def _channel_numbers_in_bank(self, bank: chirp_common.Bank) -> set:
-        ''' Returns set of defined channels in specific bank object '''
+        ''' Returns set of CHIRP channels in radio bank object '''
         _bank_used = self._radio._memobj.bank_used[bank.get_index()]
         if _bank_used.in_use == 0xFFFF:
             return set()
         _members = self._radio._memobj.bank_members[bank.get_index()]
-        _chans = set(int(ch) + 1 for ch in _members.channel if ch != 0xFFFF)
-        return _chans
+        # _chans = set(int(ch) + 1 for ch in _members.channel if ch != 0xFFFF)
+        _chans = []
+        for ch in _members.channel:
+            if ch == 0xFFFF:
+                continue
+            if ch & 0x7000:
+                kf = next((key for key, val in
+                           self._radio.bank_preset_dict.items()
+                           if val == ch))
+                print(f'kf={kf}')
+                _chans += [kf]
+            else:
+                _chans += [int(ch) + 1]
+        return set(_chans)
 
     def _update_bank_with_channel_numbers(self,
                                           bank: chirp_common.Bank,
@@ -839,10 +851,18 @@ class FT1BankModel(chirp_common.BankModel,
 
         empty = 0
         for index, channel_number in enumerate(sorted(channels_in_bank)):
-            # Use channel_number for presets, channel_number - 1 for the rest
-            _members.channel[index] = channel_number - \
-                1 if channel_number & 0x7000 == 0 else 0
+            if channel_number == 0xFFFF:
+                continue
             empty = index + 1
+            # Use channel_number for presets, channel_number - 1 for the rest
+            if channel_number & 0x7000:
+                _members.channel[index] = channel_number
+            if channel_number >= list(self._radio.bank_preset_dict.keys())[0]:
+                _members.channel[index] = \
+                    self._radio.bank_preset_dict[channel_number]
+            else:
+                _members.channel[index] = channel_number - 1
+        # Fill the rest with "empty"
         for index in range(empty, len(_members.channel)):
             _members.channel[index] = 0xFFFF
 
@@ -1069,6 +1089,14 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     _MYCALL_CHR_SET = list(string.ascii_uppercase) + \
         list(string.digits) + ['-', '/']
 
+    def get_memobj(self):
+        return self._memobj
+
+    def __init__(self, port) -> None:
+        super().__init__(port)
+        # will contain {CHIRP number: Radio number} pairs for Presets
+        self.bank_preset_dict = {}
+
     @classmethod
     def match_model(cls, filedata, filename):
         if filename.endswith(cls._adms_ext):
@@ -1215,6 +1243,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             # read data from specific YAESU_PRESETS (from slotloc as _mem)
             mem.empty = False
             mem.extd_number = ename
+            self.bank_preset_dict[num] = _mem[0]
             # DAR mem.number = _mem[0]
             mem.name = _mem[1]
             mem.freq = _mem[2]
@@ -1347,9 +1376,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             LOG.debug('New mode FM, disabling AMS')
             _mem.digmode = 0
         _mem.mode = self._encode_mode(mem)
-        bm = self.get_bank_model()
-        for bank in bm.get_memory_mappings(mem):
-            bm.remove_memory_from_mapping(mem, bank)
 
     def _debank(self, mem):
         bm = self.get_bank_model()
