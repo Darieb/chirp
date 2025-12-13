@@ -826,7 +826,6 @@ class FT1BankModel(chirp_common.BankModel,
         if _bank_used.in_use == 0xFFFF:
             return set()
         _members = self._radio._memobj.bank_members[bank.get_index()]
-        # _chans = set(int(ch) + 1 for ch in _members.channel if ch != 0xFFFF)
         _chans = []
         for ch in _members.channel:
             if ch == 0xFFFF:
@@ -835,7 +834,6 @@ class FT1BankModel(chirp_common.BankModel,
                 kf = next((key for key, val in
                            self._radio.bank_preset_dict.items()
                            if val == ch))
-                print(f'kf={kf}')
                 _chans += [kf]
             else:
                 _chans += [int(ch) + 1]
@@ -844,20 +842,26 @@ class FT1BankModel(chirp_common.BankModel,
     def _update_bank_with_channel_numbers(self,
                                           bank: chirp_common.Bank,
                                           channels_in_bank: set) -> None:
-        ''' Put identifiers (channels_in_bank) into specific bank object '''
+        ''' Put identifiers (channels_in_bank) into Radio's bank mapping ''''
         _members = self._radio._memobj.bank_members[bank.get_index()]
         if len(channels_in_bank) > len(_members.channel):
             raise Exception("Too many entries in bank %d" % bank.get_index())
 
         empty = 0
+        preset0 = 0xFFFF if not self._radio.bank_preset_dict else \
+            list(self._radio.bank_preset_dict.keys())[0]
         for index, channel_number in enumerate(sorted(channels_in_bank)):
+            # ignore empty channel in bank
             if channel_number == 0xFFFF:
                 continue
+            print(f'_update_bank: {bank}, {channel_number}, p0={preset0}')
             empty = index + 1
             # Use channel_number for presets, channel_number - 1 for the rest
             if channel_number & 0x7000:
                 _members.channel[index] = channel_number
-            if channel_number >= list(self._radio.bank_preset_dict.keys())[0]:
+                continue
+            # Use Preset channel number instead of CHIRPs index number
+            if channel_number >= preset0:
                 _members.channel[index] = \
                     self._radio.bank_preset_dict[channel_number]
             else:
@@ -869,13 +873,11 @@ class FT1BankModel(chirp_common.BankModel,
     def add_memory_to_mapping(self,
                               memory: chirp_common.Memory,
                               bank: chirp_common.Bank) -> None:
-        ''' Add identified CHIRP Memory to specific bank object '''
+        ''' Add identified CHIRP Memory to specific bank mapping '''
         channels_in_bank = self._channel_numbers_in_bank(bank)
         channels_in_bank.add(memory.number)
         print(f'add_memory: {memory.number}, {bank}, '
               f'{channels_in_bank}')
-        self._update_bank_with_channel_numbers(bank, channels_in_bank)
-
         _bank_used = self._radio._memobj.bank_used[bank.get_index()]
         _bank_used.in_use = 0x06
 
@@ -916,7 +918,8 @@ class FT1BankModel(chirp_common.BankModel,
 
 # Note: other radios like FTM3200Radio subclass this radio
 @directory.register
-class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
+class FT1Radio(yaesu_clone.YaesuCloneModeRadio,
+               chirp_common.ExperimentalRadio):
     """Yaesu FT1DR"""
     BAUD_RATE = 38400
     VENDOR = "Yaesu"
@@ -1091,6 +1094,12 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
 
     def get_memobj(self):
         return self._memobj
+
+    @classmethod
+    def get_experimental_warning(cls):
+        return ('Yaesu-defined  presets are now shown as (immutable) memories '
+                'and can only be referenced in banks tab. '
+                'No other functions have changed. 2025-12')
 
     def __init__(self, port) -> None:
         super().__init__(port)
