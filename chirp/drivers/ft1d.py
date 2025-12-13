@@ -842,7 +842,7 @@ class FT1BankModel(chirp_common.BankModel,
     def _update_bank_with_channel_numbers(self,
                                           bank: chirp_common.Bank,
                                           channels_in_bank: set) -> None:
-        ''' Put identifiers (channels_in_bank) into Radio's bank mapping ''''
+        ''' Put identifiers (channels_in_bank) into Radio's bank mapping '''
         _members = self._radio._memobj.bank_members[bank.get_index()]
         if len(channels_in_bank) > len(_members.channel):
             raise Exception("Too many entries in bank %d" % bank.get_index())
@@ -876,6 +876,7 @@ class FT1BankModel(chirp_common.BankModel,
         ''' Add identified CHIRP Memory to specific bank mapping '''
         channels_in_bank = self._channel_numbers_in_bank(bank)
         channels_in_bank.add(memory.number)
+        self._update_bank_with_channel_numbers(bank, channels_in_bank)
         print(f'add_memory: {memory.number}, {bank}, '
               f'{channels_in_bank}')
         _bank_used = self._radio._memobj.bank_used[bank.get_index()]
