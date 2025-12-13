@@ -854,7 +854,6 @@ class FT1BankModel(chirp_common.BankModel,
             # ignore empty channel in bank
             if channel_number == 0xFFFF:
                 continue
-            print(f'_update_bank: {bank}, {channel_number}, p0={preset0}')
             empty = index + 1
             # Use channel_number for presets, channel_number - 1 for the rest
             if channel_number & 0x7000:
@@ -877,8 +876,6 @@ class FT1BankModel(chirp_common.BankModel,
         channels_in_bank = self._channel_numbers_in_bank(bank)
         channels_in_bank.add(memory.number)
         self._update_bank_with_channel_numbers(bank, channels_in_bank)
-        print(f'add_memory: {memory.number}, {bank}, '
-              f'{channels_in_bank}')
         _bank_used = self._radio._memobj.bank_used[bank.get_index()]
         _bank_used.in_use = 0x06
 
@@ -887,8 +884,6 @@ class FT1BankModel(chirp_common.BankModel,
                                    bank: chirp_common.Bank) -> None:
         ''' Remove specific CHIRP memory from specific bank object '''
         channels_in_bank = self._channel_numbers_in_bank(bank)
-        print(f'remove_memory: {memory.number}, {bank}, '
-              f'{channels_in_bank}')
         try:
             channels_in_bank.remove(memory.number)
         except KeyError as error:
@@ -905,7 +900,6 @@ class FT1BankModel(chirp_common.BankModel,
         memories = []
         for channel in self._channel_numbers_in_bank(bank):
             memories.append(self._radio.get_memory(channel))
-        print(f'get_mapping: {bank} {memories}')
         return memories
 
     def get_memory_mappings(self, memory: chirp_common.Memory) -> list:
