@@ -913,8 +913,7 @@ class FT1BankModel(chirp_common.BankModel,
 
 # Note: other radios like FTM3200Radio subclass this radio
 @directory.register
-class FT1Radio(yaesu_clone.YaesuCloneModeRadio,
-               chirp_common.ExperimentalRadio):
+class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     """Yaesu FT1DR"""
     BAUD_RATE = 38400
     VENDOR = "Yaesu"
@@ -1089,12 +1088,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio,
 
     def get_memobj(self):
         return self._memobj
-
-    @classmethod
-    def get_experimental_warning(cls):
-        return ('Yaesu-defined  presets are now shown as (immutable) memories '
-                'and can only be referenced in banks tab. '
-                'No other functions have changed. 2025-12')
 
     def __init__(self, port) -> None:
         super().__init__(port)
