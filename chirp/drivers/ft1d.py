@@ -543,7 +543,6 @@ POWER_LEVELS = [chirp_common.PowerLevel("Hi", watts=5.00),
 SKIPNAMES = ["Skip%i" % i for i in range(901, 1000)]
 PMSNAMES = ["%s%i" % (c, i) for i in range(1, 51) for c in ['L', 'U']]
 HOMENAMES = ["Home%i" % i for i in range(1, 12)]
-ALLNAMES = SKIPNAMES + PMSNAMES + HOMENAMES
 
 # Yaesu defines multiple receive-only frequencies.
 # The dictionary below contains the appropriate data.
@@ -551,16 +550,16 @@ ALLNAMES = SKIPNAMES + PMSNAMES + HOMENAMES
 # get_memory is called can only be referenced by CHIRP in the banks.
 # index: ('Addr', 'Name', Frequency, 'Mode', 'Duplex', Offset, 'Comment'),
 YAESU_PRESETS = {
-     'WX01': (0x1800, 'WX1PA7', 162550000, 'FM', '', 0, ''),
-     'WX02': (0x1801, 'WX2PA1', 162400000, 'FM', '', 0, ''),
-     'WX03': (0x1802, 'WX3PA4', 162475000, 'FM', '', 0, ''),
-     'WX04': (0x1803, 'WX4PA2', 162425000, 'FM', '', 0, ''),
-     'WX05': (0x1804, 'WX5PA3', 162450000, 'FM', '', 0, ''),
-     'WX06': (0x1805, 'WX6PA5', 162500000, 'FM', '', 0, ''),
-     'WX07': (0x1806, 'WX7PA6', 162525000, 'FM', '', 0, ''),
-     'Wx18': (0x0807, 'WX8',    161650000, 'FM', '', 0, ''),
-     'WX09': (0x1808, 'WX9',    161775000, 'FM', '', 0, ''),
-     'WX10': (0x1809, 'unused', 163275000, 'FM', '', 0, ''),
+     'WX01': (0x2000, 'WX1PA7', 162550000, 'FM', '', 0, ''),
+     'WX02': (0x2001, 'WX2PA1', 162400000, 'FM', '', 0, ''),
+     'WX03': (0x2002, 'WX3PA4', 162475000, 'FM', '', 0, ''),
+     'WX04': (0x2003, 'WX4PA2', 162425000, 'FM', '', 0, ''),
+     'WX05': (0x2004, 'WX5PA3', 162450000, 'FM', '', 0, ''),
+     'WX06': (0x2005, 'WX6PA5', 162500000, 'FM', '', 0, ''),
+     'WX07': (0x2006, 'WX7PA6', 162525000, 'FM', '', 0, ''),
+     'Wx20': (0x2007, 'WX8',    161650000, 'FM', '', 0, ''),
+     'WX09': (0x2008, 'WX9',    161775000, 'FM', '', 0, ''),
+     'WX10': (0x2009, 'unused', 163275000, 'FM', '', 0, ''),
      'Marine01': (0x2800,  'SEA 01', 160650000, 'FM', '-', 4600000,
                   'Port Operations and Comm'),
      'Marine02': (0x2801,  'VHF 2',  160700000, 'FM', '-', 4600000, ''),
@@ -761,19 +760,20 @@ SPECIALS = [
     ("Home", HOMENAMES),
     ("Presets", list(YAESU_PRESETS.keys())),
     ]
-# Band edges are integer Hz.
+ALLNAMES = SKIPNAMES + PMSNAMES + HOMENAMES + list(YAESU_PRESETS.keys())
+# Band edges are integer Hz. These should mach HOMENAMES
 VALID_BANDS = [
-    (510000, 1790000),
-    (1800000, 50490000),
-    (50500000, 75990000),
-    (76000000, 107990000),
-    (108000000, 136990000),
-    (145000000, 169920000),
-    (174000000, 221950000),
-    (222000000, 419990000),
-    (420000000, 469990000),
-    (470000000, 773990000),
-    (810010000, 999000000)
+    (522000, 1710000),
+    (1800000, 30000000),
+    (3000000, 76000000),
+    (76000000, 108000000),
+    (108000000, 137000000),
+    (137000000, 174000000),
+    (174000000, 222000000),
+    (222000000, 420000000),
+    (420000000, 774000000),
+    (470000000, 770000000),
+    (800000000, 999000000)
 ]
 
 
@@ -831,9 +831,13 @@ class FT1BankModel(chirp_common.BankModel,
             if ch == 0xFFFF:
                 continue
             if ch & 0x7000:
-                kf = next((key for key, val in
-                           self._radio.bank_preset_dict.items()
-                           if val == ch))
+                try:
+                    kf = next((key for key, val in
+                              self._radio.bank_preset_dict.items()
+                              if val == ch))
+                except StopIteration as error:
+                    msg = f'Invalid bank "{bank}" channel {ch}. Ignored.'
+                    raise errors.RadioError(msg) from error
                 _chans += [kf]
             else:
                 _chans += [int(ch) + 1]
@@ -1086,9 +1090,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     _MYCALL_CHR_SET = list(string.ascii_uppercase) + \
         list(string.digits) + ['-', '/']
 
-    def get_memobj(self):
-        return self._memobj
-
     def __init__(self, port) -> None:
         super().__init__(port)
         # will contain {CHIRP number: Radio number} pairs for Presets
@@ -1181,7 +1182,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         _n += ndx
         return (array, ndx, _n)
 
-    def slotloc(self, memref, extref=None):
+    def slotloc(self, memref, extref=None) -> tuple:
         '''
         Determine Radio memory location based upon CHIRP memory referenc
         Called with a "memref" index to CHIRP memory (int or str)
@@ -1198,15 +1199,21 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         num = memref
         name = ""
         mstr = isinstance(memref, str)
-        specials = ALLNAMES
+        _flag = None
         extr = False
         if extref is not None:
-            extr = extref in specials
+            extr = extref in ALLNAMES
         if mstr or extr:        # named special?
             name = memref if mstr else extref
             array, ndx, num = self._get_special_indices(name)
         elif memref > self.MAX_MEM_SLOT:         # numbered special
-            name = extref
+            # Use CHIRP's index, preferably
+            memnum = memref if memref & 0x7000 == 0 \
+                else next((int(key) for key, v in self.bank_preset_dict.items()
+                          if v == memref), 0xFFFF)
+            if memnum == 0xFFFF:
+                LOG.warning('Slotloc: unknown special %d' % memref)
+            name = extref if extref else ALLNAMES[memnum - self.MAX_MEM_SLOT]
             array, ndx, _num = self._get_special_indices(name)
         else:
             array = "memory"
@@ -1241,13 +1248,13 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             mem.empty = False
             mem.extd_number = ename
             self.bank_preset_dict[num] = _mem[0]
-            # DAR mem.number = _mem[0]
             mem.name = _mem[1]
             mem.freq = _mem[2]
             mem.mode = _mem[3]
             mem.duplex = _mem[4]
             mem.offset = _mem[5]
             mem.comment = _mem[6]
+            # Can't make freq immutable, because tests try to change it
             mem.immutable += ["empty", "number", "extd_number",
                               'skip', "mode", "duplex", "offset", "comment"]
             self._get_mem_extra(mem, False)
@@ -1379,13 +1386,13 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         for bank in bm.get_memory_mappings(mem):
             bm.remove_memory_from_mapping(mem, bank)
 
-    def validate_memory(self, mem):
-        # Only check the home registers for appropriate bands
+    def validate_memory(self, mem: chirp_common.Memory) -> list:
         msgs = super().validate_memory(mem)
-        ndx = mem.number - ALLNAMES.index("Home1") - self.MAX_MEM_SLOT - 1
-        if 10 >= ndx >= 0:
+        # Only check the home registers for appropriate bands
+        ndx = mem.number - ALLNAMES.index("Home1") - self.MAX_MEM_SLOT
+        if len(HOMENAMES) > ndx >= 0:
             f = VALID_BANDS[ndx]
-            if not(f[0] < mem.freq < f[1]):
+            if not f[0] < mem.freq < f[1]:
                 msgs.append(chirp_common.ValidationError(
                             "Frequency outside of band for Home%2d" %
                             (ndx + 1)))
