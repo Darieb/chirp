@@ -234,7 +234,7 @@ struct memslot {
 
 // Memory       n.b., Unneeded for FTM-3200 and FTM-7250, but needs memslot
 #seekto 0x10CA;
-struct memslot Home[11];
+struct memslot Home[12];
 
 // Settings     n.b., these are unused in FTM-3200 and FTM-7250,
 //              But are needed for spacing!
@@ -542,7 +542,20 @@ POWER_LEVELS = [chirp_common.PowerLevel("Hi", watts=5.00),
                 chirp_common.PowerLevel("L1", watts=0.05)]
 SKIPNAMES = ["Skip%i" % i for i in range(901, 1000)]
 PMSNAMES = ["%s%i" % (c, i) for i in range(1, 51) for c in ['L', 'U']]
-HOMENAMES = ["Home%i" % i for i in range(1, 12)]
+HOMENAMES = [
+             'AM BC Band',
+             'SW Band',
+             '50MHz Band',
+             'FM BC Band',
+             'VHF stuff',
+             'AIR Band',
+             '2m Band',
+             'VHF Band',
+             'INFO 1 ',
+             '70cm Band',
+             'UHF Band',
+             'INFO 2',
+            ]
 
 # Yaesu defines multiple receive-only frequencies.
 # The dictionary below contains the appropriate data.
@@ -1389,13 +1402,14 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     def validate_memory(self, mem: chirp_common.Memory) -> list:
         msgs = super().validate_memory(mem)
         # Only check the home registers for appropriate bands
-        ndx = mem.number - ALLNAMES.index("Home1") - self.MAX_MEM_SLOT
+        ndx = mem.number - ALLNAMES.index(HOMENAMES[0]) - self.MAX_MEM_SLOT
         if len(HOMENAMES) > ndx >= 0:
+            print(f'validate_memory: {mem.number}, {ndx}')
             f = VALID_BANDS[ndx]
             if not f[0] < mem.freq < f[1]:
                 msgs.append(chirp_common.ValidationError(
-                            "Frequency outside of band for Home%2d" %
-                            (ndx + 1)))
+                            "%s frequency %d outside of range [%d, %d]" %
+                            (mem.name, mem.freq, f[0], f[1])))
         return msgs
 
     def set_memory(self, memory: chirp_common.Memory) -> None:
