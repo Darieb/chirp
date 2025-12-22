@@ -40,3 +40,5 @@ chirp/locale/.files
 result/
 # for nvim editor
 .nvim.lua
+# for MacOS
+.DS_Store
