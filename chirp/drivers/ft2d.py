@@ -200,6 +200,12 @@ class FT5D(FT2D):
     _model = b"AH82M"
     FORMATS = [directory.register_format('FT5D ADMS-14', '*.ft5d')]
 
+    def get_features(self):
+        rf = super(FT2D, self).get_features()
+        # temporary, 'til memory map understood
+        rf.has_settings = False
+        return rf
+
     def load_mmap(self, filename):
         if filename.lower().endswith('.ft5d'):
             with open(filename, 'rb') as f:
