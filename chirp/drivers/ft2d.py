@@ -23,7 +23,7 @@ from chirp import errors
 from chirp import memmap
 from chirp import bitwise
 from chirp.settings import RadioSetting, RadioSettings
-from chirp.settings import RadioSettingValueString
+from chirp.settings import RadioSettingValueString, RadioSettingGroup
 from chirp import util
 
 # Differences from Yaesu FT1D
@@ -235,7 +235,7 @@ class FT5D(FT2D):
 
     # Only for tests. I hope to put this back into ft1d.py
     def _get_settings(self) -> RadioSettings:
-        top = RadioSettings(  # self._get_aprs_settings(),
+        top = RadioSettings(self._get_aprs_settings(),
                             self._get_digital_settings(),
                             self._get_dtmf_settings(),
                             self._get_misc_settings(),
@@ -248,3 +248,91 @@ class FT5D(FT2D):
         if filename.endswith('.ft5d'):
             return True
         return super().match_model(filedata, filename)
+
+    # For FT5D testing, hope to remove
+    def _get_aprs_settings(self) -> RadioSettingGroup:
+        menu = RadioSettingGroup("aprs_top", "APRS")
+        menu.append(self._get_aprs_general_settings())
+        menu.append(self._get_aprs_rx_settings())
+        menu.append(self._get_aprs_tx_settings())
+        menu.append(self._get_aprs_smartbeacon())
+        menu.append(self._get_aprs_msgs())
+        menu.append(self._get_aprs_beacons())
+        return menu
+
+    # For FT5D testing, hope to remove
+    def _get_aprs_beacons(self):
+        menu = RadioSettingGroup("aprs_beacons", "APRS Beacons")
+        aprs_beacon = self._memobj.aprs_beacon_pkt
+        aprs_meta = self._memobj.aprs_beacon_meta
+
+        for index in range(0, 60):
+            # There is probably a more pythonesque way to do this
+            scl = int(aprs_meta[index].sender_callsign[0])
+            dcl = int(aprs_beacon[index].dst_callsign[0])
+            print(f'_gab: {index}, from-{scl} to-{dcl}')
+            if scl != 255 and scl != 0:  # ignore if empty send call
+                callsign = str(aprs_meta[index].sender_callsign).rstrip("\xFF")
+                val = RadioSettingValueString(0, 9, callsign)
+                val.set_mutable(False)
+                rs = RadioSetting(
+                    "aprs_beacon.src_callsign%d" % index,
+                    "SRC Callsign %d" % index, val)
+                menu.append(rs)
+
+                if dcl != 255 and dcl != 0:   # ignore if empty dest call
+                    val = str(aprs_beacon[index].dst_callsign)
+                    val = RadioSettingValueString(0, 9, val.rstrip("\xFF"))
+                    val.set_mutable(False)
+                    rs = RadioSetting(
+                        "aprs_beacon.dst_callsign%d" % index,
+                        "DST Callsign %d" % index, val)
+                    menu.append(rs)
+
+                date = "%02d/%02d/%02d" % (
+                    aprs_meta[index].date[0],
+                    aprs_meta[index].date[1],
+                    aprs_meta[index].date[2])
+                val = RadioSettingValueString(0, 8, date)
+                val.set_mutable(False)
+                rs = RadioSetting("aprs_beacon.date%d" % index, "Date", val)
+                menu.append(rs)
+
+                time = "%02d:%02d" % (
+                    aprs_meta[index].time[0],
+                    aprs_meta[index].time[1])
+                val = RadioSettingValueString(0, 5, time)
+                val.set_mutable(False)
+                rs = RadioSetting("aprs_beacon.time%d" % index, "Time", val)
+                menu.append(rs)
+
+                if dcl != 255 and dcl != 0:   # ignore if empty dest call
+                    path = bitwise.get_string(aprs_beacon[index].path)\
+                          .replace("\x00", " ").strip('\xff')
+                    print(f'_gab: {type(aprs_beacon[index].path)}'
+                          f'{aprs_beacon[index].path}, {path}')
+                    path = ''.join(c for c in path if c.isprintable()).strip()
+                    path = str(path).replace("\xE0", "*")
+                    val = RadioSettingValueString(0, 32, path)
+                    val.set_mutable(False)
+                    rs = RadioSetting(
+                     "aprs_beacon.path%d" % index, "Digipath", val)
+                    menu.append(rs)
+
+                body = bitwise.get_string(aprs_beacon[index].body).\
+                       strip("\xFF")
+                checksum = body[-2:]
+                body = ''.join(s for s in body[:-2]
+                               if s.isprintable()).translate(
+                                   str.maketrans(
+                                       "", "", "\x09\x0a\x0b\x0c\x0d"))
+                try:
+                    val = RadioSettingValueString(0, 134, body.strip())
+                except Exception as e:
+                    LOG.error("Error in APRS beacon at index %s", index)
+                    raise e
+                val.set_mutable(False)
+                rs = RadioSetting("aprs_beacon.body%d" % index, "Body", val)
+                menu.append(rs)
+
+        return menu
