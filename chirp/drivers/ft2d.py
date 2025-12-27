@@ -10,7 +10,7 @@
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU General Public License for more details. 
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
@@ -21,7 +21,8 @@ from chirp.drivers import ft1d
 from chirp import chirp_common, directory
 from chirp import errors
 from chirp import memmap
-from chirp.settings import RadioSetting
+from chirp import bitwise
+from chirp.settings import RadioSetting, RadioSettings
 from chirp.settings import RadioSettingValueString
 from chirp import util
 
@@ -203,7 +204,7 @@ class FT5D(FT2D):
     def get_features(self):
         rf = super(FT2D, self).get_features()
         # temporary, 'til memory map understood
-        rf.has_settings = False
+        # rf.has_settings = False
         return rf
 
     def load_mmap(self, filename):
@@ -231,6 +232,16 @@ class FT5D(FT2D):
                 LOG.info('Wrote ADMS-14 file')
         else:
             chirp_common.CloneModeRadio.save_mmap(self, filename)
+
+    # Only for tests. I hope to put this back into ft1d.py
+    def _get_settings(self) -> RadioSettings:
+        top = RadioSettings(  # self._get_aprs_settings(),
+                            self._get_digital_settings(),
+                            self._get_dtmf_settings(),
+                            self._get_misc_settings(),
+                            self._get_scan_settings(),
+                            self._get_backtrack_settings())
+        return top
 
     @classmethod
     def match_model(cls, filedata, filename):

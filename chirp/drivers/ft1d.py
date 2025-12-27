@@ -1823,7 +1823,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
 
         # MYCALL
         mycall = self._memobj.my_call
-        mycallstr = str(mycall.callsign).rstrip("\xff").rstrip()
+        mycallstr = bitwise.get_string(mycall.callsign).rstrip("\xff\00 ")
         mycalle = RadioSettingValueString(0, 10, mycallstr, False,
                                           charset=self._MYCALL_CHR_SET)
         rs = RadioSetting('mycall.callsign',
