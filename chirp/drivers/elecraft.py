@@ -403,7 +403,7 @@ class ElecraftRadio(chirp_common.CloneModeRadio):
     NEEDS_COMPAT_SERIAL = False
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         if self.pipe:
             self.pipe.timeout = 0.1
             # Turn off Auto-info Mode, so no radio interruptions
@@ -422,7 +422,7 @@ class ElecraftRadio(chirp_common.CloneModeRadio):
         how many memories it has, what bands it supports, etc
         CHIRP calls this many times during execution, so it must be lightweight
         '''
-        rf = super().RadioFeatures()
+        rf = super().get_features()
         rf.can_odd_split = True
         rf.has_bank = False
         rf.has_bank_index = False
@@ -790,8 +790,7 @@ class KX2Radio(ElecraftRadio):
     MODEL = "KX2"
 
     def get_features(self):
-        super().get_features()
-        rf = chirp_common.RadioFeatures()
+        rf = super().get_features()
         rf.valid_modes = ["AM", "USB", "LSB", "CW", "FM", "FSK", "RTTY"]
         rf.valid_bands = [(500000, 32000000),   # Valid for KX2 w/o xvrtr
                           ]
