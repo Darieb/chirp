@@ -27,6 +27,22 @@ from chirp.settings import RadioSetting, RadioSettingGroup, \
 
 LOG = logging.getLogger(__name__)
 
+MEM_FORMAT_SETTINGS = """
+#seekto 0x02B0;
+struct {
+    u8 voiceprompt;
+    u8 voicelanguage;
+    u8 scan;
+    u8 vox;
+    u8 voxlevel;
+    u8 voxinhibitonrx;
+    u8 lowvolinhibittx;
+    u8 highvolinhibittx;
+    u8 alarm;
+    u8 fmradio;
+} settings;
+"""
+
 MEM_FORMAT = """
 #seekto 0x0010;
 struct {
@@ -44,20 +60,7 @@ struct {
        bcl:1;
     u8 unknown4[3];
 } memory[16];
-#seekto 0x02B0;
-struct {
-    u8 voiceprompt;
-    u8 voicelanguage;
-    u8 scan;
-    u8 vox;
-    u8 voxlevel;
-    u8 voxinhibitonrx;
-    u8 lowvolinhibittx;
-    u8 highvolinhibittx;
-    u8 alarm;
-    u8 fmradio;
-} settings;
-"""
+""" + MEM_FORMAT_SETTINGS
 
 H777_SETTINGS2 = """
 #seekto 0x03C0;
@@ -116,7 +119,7 @@ def _h777_enter_programming_mode(serial, radio_cls):
         raise errors.RadioError("Error communicating with radio")
 
     if not ack:
-        raise errors.RadioError("No response from radio to program command")
+        raise errors.RadioNoResponse()
     elif ack != CMD_ACK:
         LOG.warning('Ack from program command was %r, expected %r',
                     ack, CMD_ACK)
@@ -144,7 +147,7 @@ def _h777_enter_programming_mode(serial, radio_cls):
             raise errors.RadioError('No ACK after reading ident')
         return ident
 
-    raise errors.RadioError('No identification received from radio')
+    raise errors.RadioNoResponse()
 
 
 def _h777_exit_programming_mode(serial):
@@ -206,7 +209,7 @@ def _h777_write_block(radio, block_addr, block_size):
 def _h777_enter_single_programming_mode(radio):
     ident = _h777_enter_programming_mode(radio.pipe, radio.__class__)
     if not ident:
-        raise errors.RadioError('Radio did not identify')
+        raise errors.RadioNoResponse()
     if not any(rc_ident in ident for rc_ident in radio.IDENT):
         LOG.warning('Expected %s for %s but got:\n%s',
                     radio.IDENT, radio.__class__.__name__,
@@ -656,6 +659,65 @@ class RetevisH777(H777Radio):
         return False
 
 
+MP31_MEM_FORMAT = """
+#seekto 0x0000;
+struct {
+    lbcd rxfreq[4];
+    lbcd txfreq[4];
+    lbcd rxtone[2];
+    lbcd txtone[2];
+    u8 unknown3:1,
+       unknown2:1,
+       unknown1:1,
+       skip:1,
+       highpower:1,
+       narrow:1,
+       beatshift:1,
+       bcl:1;
+    u8 unknown4[3];
+} memory[38];
+"""
+
+MP31_SETTINGS2 = """
+#seekto 0x026B;
+struct {
+    u8 squelchlevel;
+    u8 batterysaver;
+    u8 voxdelay;
+    u8 timeouttimer;
+    u8 scanmode;
+    u8 beep;
+    u8 sidekey;
+    u8 rxemergency;
+} settings2;
+"""
+
+
+@directory.register
+class MP31Radio(H777Radio):
+    """Baofeng MP31"""
+    VENDOR = "Baofeng"
+    MODEL = "MP31"
+    IDENT = [b"P3107\xf7\x00\x00"]
+    _ranges = [(0x0000, 0x0400)]
+    _memsize = 0x0400
+    _has_sidekey = False
+    ALIASES = []
+
+    def process_mmap(self):
+        self._memobj = bitwise.parse(
+            MP31_MEM_FORMAT + MP31_SETTINGS2 + MEM_FORMAT_SETTINGS, self._mmap)
+
+    def get_features(self):
+        rf = super().get_features()
+        rf.memory_bounds = (1, 38)
+        return rf
+
+    @classmethod
+    def match_model(cls, filedata, filename):
+        return False
+
+
 class H777TestCase(unittest.TestCase):
 
     def setUp(self):
@@ -702,6 +764,23 @@ class H777TestCase(unittest.TestCase):
     def test_encode_tone_none(self):
         self.driver._encode_tone(self.testdata.foo, '', 67.0, 'N')
         self.assertEqual(16665, int(self.testdata.foo))
+
+    def test_mp31_38_channels(self):
+        radio = MP31Radio(None)
+        rf = radio.get_features()
+        self.assertEqual(rf.memory_bounds, (1, 38))
+
+    def test_mp31_memsize(self):
+        radio = MP31Radio(None)
+        self.assertEqual(radio._memsize, 0x0400)
+
+    def test_mp31_ranges(self):
+        radio = MP31Radio(None)
+        self.assertEqual(radio._ranges, [(0x0000, 0x0400)])
+
+    def test_mp31_ident(self):
+        radio = MP31Radio(None)
+        self.assertIn(b"P3107\xf7\x00\x00", radio.IDENT)
 
 
 @directory.register

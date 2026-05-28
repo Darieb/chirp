@@ -70,11 +70,13 @@ def ensure_has_calls(radio, memory):
 
 
 def _import_freq(dst_radio, _srcrf, mem):
-    dst_bands = dst_radio.get_features().valid_bands
+    dst_rf = dst_radio.get_features()
+    dst_bands = dst_rf.valid_bands
     if not any(lo <= mem.freq <= hi for (lo, hi) in dst_bands):
         raise DestNotCompatible(
-            _('Frequency %s is out of supported range') % (
-                chirp_common.format_freq(mem.freq)))
+            _('Frequency %s is out of supported ranges %s') % (
+                chirp_common.format_freq(mem.freq),
+                dst_rf.concise_bands))
 
 
 # Filter the name according to the destination's rules
@@ -138,9 +140,19 @@ def _import_tone(dst_radio, srcrf, mem):
     # ctone). If we're importing to or from radios with differing models,
     # do the conversion here.
 
-    if srcrf.has_ctone and not dstrf.has_ctone:
+    if mem.tmode == "":
+        pass
+    elif srcrf.has_ctone and not dstrf.has_ctone:
         # If copying from a radio with separate rtone/ctone to a radio
         # without, and the tmode is TSQL, then use the ctone value
+        if mem.rtone not in dstrf.valid_tones:
+            raise DestNotCompatible(
+                "Destination does not support tone frequency %s" %
+                mem.rtone)
+        if mem.ctone not in dstrf.valid_tones:
+            raise DestNotCompatible(
+                "Destination does not support tone frequency %s" %
+                mem.ctone)
         if mem.tmode == "TSQL":
             mem.rtone = mem.ctone
     elif not srcrf.has_ctone and dstrf.has_ctone:
@@ -278,7 +290,11 @@ def import_mem(dst_radio, src_features, src_mem, overrides={}, mem_cls=None):
         cur_mem = dst_radio.get_memory(dst_mem.number)
         dst_radio.check_set_memory_immutable_policy(cur_mem, dst_mem)
 
-    msgs = dst_radio.validate_memory(dst_mem)
+    try:
+        msgs = dst_radio.validate_memory(chirp_common.FrozenMemory(dst_mem))
+    except errors.FrozenMemoryError as e:
+        raise DestNotCompatible(str(e))
+
     errs = [x for x in msgs if isinstance(x, chirp_common.ValidationError)]
     if errs:
         raise DestNotCompatible(", ".join(errs))

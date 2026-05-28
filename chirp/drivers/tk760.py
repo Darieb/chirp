@@ -214,8 +214,10 @@ def open_radio(radio):
     # in between the flush and the start of the magic. Consider it successful
     # if we see ACK anywhere in the response
     resp = rawrecv(radio, 256)
+    if not resp:
+        raise errors.RadioNoResponse()
     if ACK_CMD not in resp:
-        raise errors.RadioError('Radio did not respond to program mode')
+        raise errors.RadioError('Unexpected response to program mode')
 
     # 0x02 Means "show me your ident"
     rawsend(radio, b"\x02")
@@ -387,6 +389,8 @@ class Kenwood_M60_Radio(chirp_common.CloneModeRadio,
         """Download from radio"""
         try:
             self._mmap = do_download(self)
+        except errors.RadioError:
+            raise
         except Exception as e:
             LOG.exception('Failed to download: %s', e)
             rawsend(self, b'E')
@@ -405,6 +409,8 @@ class Kenwood_M60_Radio(chirp_common.CloneModeRadio,
         # do the upload
         try:
             do_upload(self)
+        except errors.RadioError:
+            raise
         except Exception as e:
             LOG.exception('Failed to upload: %s', e)
             rawsend(self, b'E')
@@ -644,11 +650,7 @@ class Kenwood_M60_Radio(chirp_common.CloneModeRadio,
         self.encode_tone(_tone.tx_tone, txmode, txtone, txpol)
         self.encode_tone(_tone.rx_tone, rxmode, rxtone, rxpol)
 
-        # power, default power is low
-        if mem.power is None:
-            mem.power = POWER_LEVELS[0]
-
-        _ch.power = POWER_LEVELS.index(mem.power)
+        _ch.power = POWER_LEVELS.index(mem.power or POWER_LEVELS[0])
 
         # wide/marrow
         _ch.wide = MODES.index(mem.mode)

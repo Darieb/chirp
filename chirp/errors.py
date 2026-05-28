@@ -17,6 +17,7 @@ import enum
 
 
 class Reasons(enum.Enum):
+    NO_RESPONSE = "No response from radio"
     NO_CONNECTION_K1 = "No response from radio. Check connector and cabling!"
     FIXED_BANKS = "This radio has fixed banks and does not allow reassignment"
 
@@ -76,6 +77,16 @@ class RadioNoContactLikelyK1(SpecificRadioError):
     CODE = Reasons.NO_CONNECTION_K1
 
 
+class RadioNoResponse(SpecificRadioError):
+    """A radio that provided no response to a command."""
+    CODE = Reasons.NO_RESPONSE
+
+
 class RadioFixedBanks(SpecificRadioError):
     """A radio that has fixed banks and cannot be changed."""
     CODE = Reasons.FIXED_BANKS
+
+
+class FrozenMemoryError(TypeError):
+    """An attempt was made to modify a frozen memory."""
+    pass

@@ -39,7 +39,7 @@
 # * probably other things too - like things encoded by the unknown bits in the
 #   memory struct
 
-from chirp import chirp_common, directory, memmap, errors, util
+from chirp import chirp_common, directory, memmap, errors, util, checksum
 from chirp import bitwise
 from chirp.settings import RadioSettingGroup, RadioSetting, \
     RadioSettingValueBoolean, RadioSettingValueList, \
@@ -328,12 +328,6 @@ def get_band_limits_Hz(limit_value):
 
 
 # Calculate the checksum used in serial packets
-def checksum(message_bytes):
-    mask = 0xFF
-    checksum = 0
-    for b in message_bytes:
-        checksum = (checksum + b) & mask
-    return checksum
 
 
 # Send a command to the radio, return any reply stripping the echo of the
@@ -404,6 +398,9 @@ def enter_program_mode(serial):
     # place the radio in program mode, and confirm
     program_response = send_serial_command(serial, b'PROGRAM')
 
+    if not program_response:
+        raise errors.RadioNoResponse()
+
     if program_response != b'QX\x06':
         raise errors.RadioError('No initial response from radio.')
     LOG.debug('entered program mode')
@@ -434,9 +431,13 @@ def exit_program_mode(serial):
 # Parse a packet from the radio returning the header (R/W, address, data, and
 # checksum valid
 def parse_read_response(resp):
+    if not resp:
+        raise errors.RadioNoResponse()
+    if len(resp) < 6:
+        raise errors.RadioError('Short read response from radio')
     addr = resp[:4]
     data = bytes(resp[4:-2])
-    cs = checksum(d for d in resp[1:-2])
+    cs = checksum.checksum_8bit(d for d in resp[1:-2])
     valid = cs == resp[-2]
     if not valid:
         LOG.error('checksumfail: %02x, expected %02x' % (cs, resp[-2]))
@@ -498,7 +499,7 @@ def do_download(radio):
 def make_write_data_cmd(addr, data, datalen):
     cmd = struct.pack('>BHB', 0x57, addr, datalen)
     cmd += data
-    cs = checksum(c for c in cmd[1:])
+    cs = checksum.checksum_8bit(c for c in cmd[1:])
     cmd += struct.pack('>BB', cs, 0x06)
     return cmd
 
@@ -966,6 +967,7 @@ class AnyTone778UVBase(chirp_common.CloneModeRadio,
                 _mem.name = mem.name.ljust(self.NAME_LENGTH)[:self.NAME_LENGTH]
 
             # Set duplex bitfields
+            _mem.tx_off = 0
             if mem.duplex == '+':
                 _mem.duplex = DUPLEX_POSSPLIT
             elif mem.duplex == '-':
@@ -975,14 +977,12 @@ class AnyTone778UVBase(chirp_common.CloneModeRadio,
             elif mem.duplex == 'split':
                 # TODO: this is an unverified punt!
                 _mem.duplex = DUPLEX_ODDSPLIT
+            elif mem.duplex == 'off':
+                # handle tx off
+                _mem.tx_off = 1
             else:
                 LOG.error('%s: set_mem: unhandled duplex: %s' %
                           (mem.name, mem.duplex))
-
-            # handle tx off
-            _mem.tx_off = 0
-            if mem.duplex == 'off':
-                _mem.tx_off = 1
 
             # Set the channel width - remember we promote 20 kHz channels to FM
             # on import
@@ -1075,7 +1075,7 @@ class AnyTone778UVBase(chirp_common.CloneModeRadio,
                 else:
                     LOG.error('%s: unhandled cross RX mode: %s' % (
                         mem.name, mem.cross_mode))
-            else:
+            elif mem.tmode:
                 LOG.error('%s: Unhandled tmode/cross %s/%s.' %
                           (mem.name, mem.tmode, mem.cross_mode))
             LOG.debug('%s: tmode=%s, cross=%s, rtone=%f, ctone=%f' % (

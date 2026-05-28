@@ -1,4 +1,4 @@
-# Copyright 2025 Fred Trimble <chirpdriver@gmail.com>
+# Copyright 2025, 2026 Fred Trimble <chirpdriver@gmail.com>
 # Derived from prior copyrighted work:
 # Copyright 2024 Pavel Moravec, OK2MOP <moravecp.cz@gmail.com>
 # Copyright 2023 Jim Unroe <rock.unroe@gmail.com>
@@ -53,6 +53,37 @@ import struct
 
 LOG = logging.getLogger(__name__)
 
+# FHSS Code is a 24-bit per-channel value. The OEM CPS represents an
+# unset code as 0xFFFFFF in raw memory and as a blank field in the UI.
+# When a code is set, the OEM also writes 0xA0 into the adjacent flag
+# byte; when the code is cleared, that flag byte is restored to 0xFF.
+FHSS_CODE_NULL = 0xFFFFFF
+FHSS_CODE_FLAG_ACTIVE = 0xA0
+FHSS_CODE_FLAG_NULL = 0xFF
+
+
+def _fhss_code_to_text(raw_code):
+    raw = int(raw_code)
+    if raw == FHSS_CODE_NULL:
+        return ""
+    return "%06X" % (raw & 0x7FFFFF)
+
+
+def _validate_fhss_code(value):
+    s = str(value).strip()
+    if s == "":
+        return value
+    try:
+        v = int(s, 16)
+    except ValueError:
+        raise InvalidValueError(
+            "FHSS Code must be a hex value (e.g. 1A2B3C) or blank")
+    if not (0 <= v <= 0x7FFFFF):
+        raise InvalidValueError(
+            "FHSS Code must be between 000000 and 7FFFFF")
+    return value
+
+
 MEM_FORMAT = """
 struct {
   lbcd rxfreq[4];     // 0-3
@@ -71,9 +102,9 @@ struct {
      bcl:1,           //     BCL
      scan:1,          //     Scan  0 = Skip, 1 = Scan
      am_modulation:1, //     Per chan AM modulation
-     learning:1;      //     Learning
-  lbcd code[3];       // 0-2 Code
-  u8 unknown6;        // 3
+     learning:1;      //     FHSS Learning
+  ul24 code;          // 0-2 FHSS Code (little-endian, 0-0x7FFFFF)
+  u8 code_flag;       // 3   0xA0 when Code set, 0xFF when blank
   char name[12];      // 4-F 12-character Alpha Tag
 } memory[%d];
 
@@ -183,7 +214,7 @@ struct {
      tailcode:1;      //      Tail Code (RT-470L)
   u8 unknown_9023;    // 9023
   u8 single_mode ;    // 9024 Single Mode (RT-900 BT)
-  u8 unknown_9025;    // 9025
+  u8 unknown_9025;    // 9025 Always 0x01 on all RT-900 variants
   u8 unknown_9026;    // 9026
   u8 unknown_9027;    // 9027
   u8 unknown_9028;    // 9028
@@ -243,10 +274,10 @@ TXPOWER_LOW = 0x02
 
 ABR_LIST = ["On", "5 seconds", "10 seconds", "15 seconds", "20 seconds",
             "30 seconds", "1 minute", "2 minutes", "3 minutes"]
-ALMODE_LIST = ["Site", "Tone", "Code"]
+ALMODE_LIST = ["On Site", "Send Sound", "Send Code"]
 AUTOLK_LIST = ["Off"] + ABR_LIST[1:4]
 DTMFSPEED_LIST = ["50 ms", "100 ms", "200 ms", "300 ms", "500 ms"]
-DTMFST_LIST = ["Off", "KeyBoard Side Tone", "ANI Side Tone", "KB ST + ANI ST"]
+DTMFST_LIST = ["Off", "DT-ST", "ANI-ST", "DT+ANI"]
 DUALTX_LIST = ["Off", "A", "B"]
 LANGUAGE_LIST = ["English", "Chinese"]
 MDF_LIST = ["Name", "Frequency", "Channel"]
@@ -519,6 +550,8 @@ class RT900BT(chirp_common.CloneModeRadio):
         """Upload to radio"""
         try:
             do_upload(self)
+        except errors.RadioError:
+            raise
         except Exception:
             # If anything unexpected happens, make sure we raise
             # a RadioError and log the problem
@@ -660,11 +693,6 @@ class RT900BT(chirp_common.CloneModeRadio):
         rset = MemSetting("settings.alarmsound", "Alarm Sound", rs)
         basic.append(rset)
 
-        # Menu 44: TDR
-        rs = RadioSettingValueBoolean(_settings.tdr)
-        rset = MemSetting("settings.tdr", "TDR", rs)
-        basic.append(rset)
-
         rs = RadioSettingValueInvertedBoolean(not _settings.fmradio)
         rset = MemSetting("settings.fmradio", "FM Radio", rs)
         basic.append(rset)
@@ -799,7 +827,6 @@ class RT900BT(chirp_common.CloneModeRadio):
         rs = RadioSettingValueList(
             PTTID_LIST,
             current_index=_settings.pttid
-            # current_index=self._memobj.vfodtmf.code
         )
         rset = MemSetting("settings.pttid", "DTMF Code", rs)
         abblock.append(rset)
@@ -1100,26 +1127,10 @@ class RT900BT(chirp_common.CloneModeRadio):
                     else:
                         index += 0x6A
                     memval.set_value(index)
-                except IndexError:
+                except ValueError:
                     msg = "DTCS Code '%d' is not supported" % value
                     LOG.error(msg)
                     raise errors.RadioError(msg)
-            case "Cross":
-                txmode, rxmode = mem.cross_mode.split("->", 1)
-
-                if txmode == "Tone":
-                    memval.set_value(int(mem.rtone * 10))
-                elif txmode == "DTCS":
-                    memval.set_value(DTCS.index(mem.dtcs) + 1)
-                else:
-                    memval.set_value(0)
-
-                if rxmode == "Tone":
-                    memval.set_value(int(mem.ctone * 10))
-                elif rxmode == "DTCS":
-                    memval.set_value(DTCS.index(mem.rx_dtcs) + 1)
-                else:
-                    memval.set_value(0)
             case _:
                 raise Exception("Internal error: invalid mode '%s'" % mode)
 
@@ -1160,7 +1171,7 @@ class RT900BT(chirp_common.CloneModeRadio):
                     code = index + 0x6a
                 elif tone.endswith('N'):  # normal
                     code = index + 1
-        except IndexError:
+        except (IndexError, ValueError):
             msg = "Unknown CTCSS/DTC tone: %s" % tone
             LOG.exception(msg)
             raise InvalidValueError(msg)
@@ -1173,6 +1184,9 @@ class RT900BT(chirp_common.CloneModeRadio):
         rf.valid_modes = ["FM", "NFM", "AM", "NAM"]  # 25kHz, 12.5kHz, AM, NAM
         rf.valid_tuning_steps = self._steps
         return rf
+
+    def get_raw_memory(self, number):
+        return repr(self._memobj.memory[number - 1])
 
     def get_memory(self, number):
         """Get the mem representation from the radio image"""
@@ -1267,6 +1281,23 @@ class RT900BT(chirp_common.CloneModeRadio):
         rset = RadioSetting("bcl", "BCL", rs)
         mem.extra.append(rset)
 
+        # LearnFHSS (per-channel learn / FHSS flag). The OEM CPS labels
+        # this column "LearnFHSS"; the open-source firmware reads the
+        # same bit as chFlag3.b0 / fhssFlag (Core/Radio.c).
+        rs = RadioSettingValueBoolean(_mem.learning)
+        rset = RadioSetting("learning", "LearnFHSS", rs)
+        mem.extra.append(rset)
+
+        # FHSS Code (24-bit little-endian, range 0x000000-0x7FFFFF).
+        # Displayed and accepted as a 6-digit uppercase hex string, or
+        # blank to clear the code (raw 0xFFFFFF). Validation is hoisted
+        # to a module-level function so this RadioSetting stays
+        # picklable for clipboard copy.
+        rs = RadioSettingValueString(0, 6, _fhss_code_to_text(_mem.code))
+        rs.set_validate_callback(_validate_fhss_code)
+        rset = RadioSetting("fhss_code", "FHSS Code (hex)", rs)
+        mem.extra.append(rset)
+
         # PTT-ID
         rs = RadioSettingValueList(PTTID_LIST, current_index=_mem.pttid)
         rset = RadioSetting("pttid", "PTT ID", rs)
@@ -1348,7 +1379,19 @@ class RT900BT(chirp_common.CloneModeRadio):
                 _mem.narrow = 0b1
 
         for setting in mem.extra:
-            setattr(_mem, setting.get_name(), setting.value)
+            if setting.get_name() == 'fhss_code':
+                # Mirror OEM CPS: blank input clears Code (0xFFFFFF) and
+                # restores the adjacent flag byte to 0xFF; any value
+                # writes Code and sets the flag byte to 0xA0.
+                s = str(setting.value).strip()
+                if s == "":
+                    _mem.code = FHSS_CODE_NULL
+                    _mem.code_flag = FHSS_CODE_FLAG_NULL
+                else:
+                    _mem.code = int(s, 16)
+                    _mem.code_flag = FHSS_CODE_FLAG_ACTIVE
+            else:
+                setattr(_mem, setting.get_name(), setting.value)
 
     def validate_memory(self, mem):
         msgs = []
@@ -1378,7 +1421,7 @@ class RT900(RT900BT):
     # ==========
     # Notice to developers:
     # The RT-900 support in this driver is currently based upon stock
-    # factory firmware.
+    # factory firmware, V0.14P
     # ==========
 
     """Radtel RT-900 (without Bluetooth)"""
@@ -1388,9 +1431,10 @@ class RT900(RT900BT):
     _has_bt_denoise = False
     _has_am_per_channel = False
     _has_am_switch = not _has_am_per_channel
-    _has_single_mode = False
+    _has_single_mode = False    # Fw V0.14P has single mode, but no menu for it
+    #                             it's toggled by Menu 7, TDR
 
-    _upper = 512  # fw 1.04P expands from 256 to 512 channels
+    _upper = 999  # fw V1.14P expands from 512 to 999 channels
 
     SKEY_LIST = ["FM Radio",
                  "TX Power Level",
@@ -1412,7 +1456,8 @@ class RT900(RT900BT):
     def get_prompts(cls):
         rp = super().get_prompts()
         rp.experimental = \
-            ('This driver is a beta version for the RT-900\n'
+            ('This driver is a beta version for the RT-900'
+             ' running Firmware V0.14P\n'
              '\n'
              'Please save an unedited copy of your first successful\n'
              'download to a CHIRP Radio Images(*.img) file.\n\n'
@@ -1425,7 +1470,7 @@ class RT900(RT900BT):
 class RT910BT(RT900BT):
     # ==========
     # Notice to developers:
-    # The RT-910 BT support in this driver is currently based upon Vx.yyP
+    # The RT-910 BT support in this driver is currently based upon V0.24P
     # firmware with 15 banks/zones of 64 channels steps.
     # ==========
     """Radtel RT-910_BT 960"""
@@ -1465,7 +1510,7 @@ class RT910BT(RT900BT):
 
     def get_features(self):
         rf = super().get_features()
-        rf.has_bank = True  # Firmware Vx.yyP supports 15
+        rf.has_bank = True  # Firmware V0.24P supports 15
         #                     "static zones" of 64 frequencies
         rf.valid_tuning_steps = self._steps
         return rf
@@ -1475,7 +1520,7 @@ class RT910BT(RT900BT):
         rp = super().get_prompts()
         rp.experimental = \
             ('This driver is a beta version for the RT-910 BT'
-             ' running Firmware V0x.yy\n'
+             ' running Firmware V0.24P\n'
              '\n'
              'Please save an unedited copy of your first successful\n'
              'download to a CHIRP Radio Images(*.img) file.\n\n'
@@ -1488,21 +1533,21 @@ class RT910BT(RT900BT):
 class RT910(RT910BT):
     # ==========
     # Notice to developers:
-    # The RT-910 support in this driver is currently based upon V0.09P
-    # firmware with 15 banks/zones of 64 channels steps.
+    # The RT-910 support in this driver is currently based upon V0.11
+    # firmware with 15 banks/zones of 64 channel steps.
     # ==========
-    """Radtel RT-910 512 (without Bluetooth)"""
+    """Radtel RT-910 960 (without Bluetooth)"""
     VENDOR = "Radtel"
     MODEL = "RT-910"
 
-    _upper = 512  # fw V0.09P supports 512 channels
+    _upper = 960  # fw V0.11 supports 960 channels
 
     _mem_params = (_upper,  # number of channels
                    )
     _ranges = [
-        (0x0000, 0x4000),  # 8 zones of 64 frequencies,
-                           # equals 512 channels of 32 bytes each
-                           # 8 * 64 * 32 = 0x4000
+        (0x0000, 0x7800),  # 15 zones of 64 frequencies,
+                           # equals 960 channels of 32 bytes each
+                           # 15 * 64 * 32 = 0x7800
         (0x8000, 0x8040),
         (0x9000, 0x9040),
         (0xA000, 0xA140),
@@ -1512,17 +1557,17 @@ class RT910(RT910BT):
     _has_bt_denoise = False
     _has_am_per_channel = True
     _has_am_switch = not _has_am_per_channel
-    _has_single_mode = False
+    _has_single_mode = True
 
     def get_bank_model(self):
-        return chirp_common.StaticBankModel(self, banks=8)
+        return chirp_common.StaticBankModel(self, banks=15)
 
     @classmethod
     def get_prompts(cls):
         rp = super().get_prompts()
         rp.experimental = \
             ('This driver is a beta version for the RT-910'
-             ' Non Bluetooth running Firmware V0.09\n'
+             ' Non Bluetooth running Firmware V0.11\n'
              '\n'
              'Please save an unedited copy of your first successful\n'
              'download to a CHIRP Radio Images(*.img) file.\n\n'
@@ -1591,6 +1636,46 @@ class RT920(RT900BT):
         rp.experimental = \
             ('This driver is a beta version for the RT-920'
              ' running Firmware V0.14P\n'
+             '\n'
+             'Please save an unedited copy of your first successful\n'
+             'download to a CHIRP Radio Images(*.img) file.\n\n'
+             'PROCEED AT YOUR OWN RISK!'
+             )
+        return rp
+
+
+@directory.register
+class RadioddityGS10B(RT900BT):
+    # ==========
+    # Radioddity GS-10B: RT-900 BT variant with 256 channels.
+    # Same magic (PROGRAMBT80U), fingerprints, and protocol as the
+    # RT-900 BT. Memory layout is identical but with fewer channels.
+    # Based on firmware V0.03.
+    # ==========
+    """Radioddity GS-10B"""
+    VENDOR = "Radioddity"
+    MODEL = "GS-10B"
+
+    _upper = 256  # 256 channels
+    _has_single_mode = False
+
+    _mem_params = (_upper,  # number of channels
+                   )
+
+    _ranges = [
+        (0x0000, 0x2000),  # 256 channels of 32 bytes each
+                           # 256 * 32 = 0x2000
+        (0x8000, 0x8040),
+        (0x9000, 0x9040),
+        (0xA000, 0xA140),
+        (0xD000, 0xD040),  # Radio mode hidden setting
+    ]
+
+    @classmethod
+    def get_prompts(cls):
+        rp = super().get_prompts()
+        rp.experimental = \
+            ('This driver is a beta version for the Radioddity GS-10B\n'
              '\n'
              'Please save an unedited copy of your first successful\n'
              'download to a CHIRP Radio Images(*.img) file.\n\n'

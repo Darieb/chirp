@@ -104,7 +104,10 @@ class HF90StyleRadio(chirp_common.CloneModeRadio,
     def _serial_prompt(self):
         reset_buffer(self.pipe)
         self._send(b'\r')
-        return self._read(3) == b'\r\n#'
+        resp = self._read(3)
+        if not resp:
+            raise errors.RadioNoResponse()
+        return resp == b'\r\n#'
 
     def _download_chunk(self, addr):
         if addr % 16:
@@ -304,7 +307,6 @@ class HF90StyleRadio(chirp_common.CloneModeRadio,
         rf.valid_skips = []
         rf.valid_tmodes = []
         rf.valid_tones = []
-        # TODO how does one make the Tone column go away?
         return rf
 
     def apply_txpower(self, setting, obj):

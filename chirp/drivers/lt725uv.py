@@ -254,6 +254,9 @@ def _rawrecv(radio, amount):
         msg = "Generic error reading data from radio; check your cable."
         raise errors.RadioError(msg)
 
+    if not data:
+        _exit_program_mode(radio)
+        raise errors.RadioNoResponse()
     if len(data) != amount:
         _exit_program_mode(radio)
         msg = "Error reading from radio: not the amount of data we want."
@@ -307,11 +310,13 @@ def _do_ident(radio):
     _rawsend(radio, magic)
 
     ack = _rawrecv(radio, 1)
+    if not ack:
+        _exit_program_mode(radio)
+        raise errors.RadioNoResponse()
     if ack != b"\x06":
         _exit_program_mode(radio)
-        if ack:
-            LOG.debug(repr(ack))
-        raise errors.RadioError("Radio did not respond")
+        LOG.debug(repr(ack))
+        raise errors.RadioError("Unexpected response from radio")
 
     return True
 
@@ -550,7 +555,9 @@ class LT725UV(chirp_common.CloneModeRadio):
         """Upload to radio"""
         try:
             _upload(self)
-        except:
+        except errors.RadioError:
+            raise
+        except Exception:
             # If anything unexpected happens, make sure we raise
             # a RadioError and log the problem
             LOG.exception('Unexpected error during upload')
@@ -568,10 +575,10 @@ class LT725UV(chirp_common.CloneModeRadio):
         return getattr(self._memobj, "%s_memory%s" % (self._vfo, suffix))
 
     def _get_dcs(self, val):
-        return int(str(val)[2:-18])
+        return val.get_bbcd()
 
     def _set_dcs(self, val):
-        return int(str(val), 16)
+        return bitwise.dec_to_bbcd(val)
 
     def get_memory(self, number):
         _mem = self._memory_obj()[number - 1]

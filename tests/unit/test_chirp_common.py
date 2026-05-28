@@ -72,11 +72,9 @@ class TestUtilityFunctions(base.BaseTest):
         self.assertTrue(chirp_common.is_version_newer('daily-20180101'))
 
     def test_from_Hz(self):
-        # FIXME: These are wrong! Adding them here purely to test the
-        # python3 conversion, but they should be fixed.
-        self.assertEqual(140, chirp_common.from_GHz(14000000001))
-        self.assertEqual(140, chirp_common.from_MHz(14000001))
-        self.assertEqual(140, chirp_common.from_kHz(14001))
+        self.assertEqual(140, chirp_common.from_GHz(140000000001))
+        self.assertEqual(140, chirp_common.from_MHz(140000001))
+        self.assertEqual(140, chirp_common.from_kHz(140001))
 
     def test_mem_to_from_csv(self):
         mem1 = chirp_common.Memory()
@@ -309,6 +307,15 @@ class TestUtilityFunctions(base.BaseTest):
         invalid = ['2500d', '2d1', 'aaa', 'a', '']
         for s in invalid:
             self.assertRaises(ValueError, chirp_common.parse_power, s)
+
+    def test_airband(self):
+        self.assertTrue(chirp_common.is_airband(108000000))
+        self.assertTrue(chirp_common.is_airband(108000000 + 25000))
+        self.assertTrue(chirp_common.is_airband(136000000 - 25000))
+        self.assertTrue(chirp_common.is_airband(136000000))
+
+        self.assertFalse(chirp_common.is_airband(108000000 - 1))
+        self.assertFalse(chirp_common.is_airband(137000000 + 1))
 
 
 class TestSplitTone(base.BaseTest):
@@ -551,6 +558,74 @@ class TestStepFunctions(base.BaseTest):
     def test_fix_rounded_step_no_change(self):
         self.assertEqual(146520000,
                          chirp_common.fix_rounded_step(146520000))
+
+    def test_fix_rounded_step_833(self):
+        # 118.008 should be aligned to 8.33kHz step
+        self.assertEqual(
+            int(118000000 + (25000 / 3)),
+            chirp_common.fix_rounded_step(chirp_common.to_MHz(118.008)))
+
+        # 108.0 MHz should be left unchanged as it is 25kHz-aligned
+        self.assertFalse(chirp_common.is_8_33(
+            chirp_common.to_MHz(108)))
+        self.assertEqual(chirp_common.to_MHz(108),
+                         chirp_common.fix_rounded_step(
+                             chirp_common.to_MHz(108)))
+
+        # 108.025 MHz should be left unchanged
+        self.assertFalse(chirp_common.is_8_33(
+            chirp_common.to_MHz(108.025)))
+        self.assertEqual(chirp_common.to_MHz(108.025),
+                         chirp_common.fix_rounded_step(
+                             chirp_common.to_MHz(108.025)))
+
+        # Even though 146.008333 is a valid 8.33kHz step, we should
+        # not align it as such since it is not in airband
+        self.assertTrue(chirp_common.is_8_33(
+            chirp_common.to_MHz(146.008333)))
+        self.assertRaisesRegex(errors.InvalidDataError,
+                               'Unable to correct.*',
+                               chirp_common.fix_rounded_step,
+                               chirp_common.to_MHz(146.008333))
+
+        # Using a channel name should be aligned to the actual frequency
+        self.assertEqual(
+            int(132050000),
+            chirp_common.fix_rounded_step(chirp_common.to_MHz(132.055)))
+        self.assertEqual(
+            int(132050000) + (25000 // 3),
+            chirp_common.fix_rounded_step(chirp_common.to_MHz(132.060)))
+        self.assertEqual(
+            int(132050000) + (25000 // 3) * 2,
+            chirp_common.fix_rounded_step(chirp_common.to_MHz(132.065)))
+        self.assertEqual(
+            int(132075000),
+            chirp_common.fix_rounded_step(chirp_common.to_MHz(132.080)))
+
+        # This is not valid
+        self.assertRaisesRegex(errors.InvalidDataError,
+                               'Aircraft frequencies must be aligned.*',
+                               chirp_common.fix_rounded_step,
+                               chirp_common.to_MHz(132.070))
+
+    def test_fix_rounded_step_833_examples(self):
+        # https://ukradiotransmissions.wordpress.com/2019/02/06/new-8-33khz-airband-channel-spacing-frequencies-a-conversion-chart-and-explanation/
+        cases = [
+            (132005000, 132000000),
+            (132010000, 132008300),
+            (132015000, 132016600),
+            (132030000, 132025000),
+            (132035000, 132033300),
+            (132040000, 132041600),
+            (132055000, 132050000),
+            (132060000, 132058300),
+            (132065000, 132066600),
+            (132080000, 132075000),
+            (132085000, 132083300),
+            (132090000, 132091600),
+        ]
+        for channel, freq in cases:
+            pass
 
 
 class TestImageMetadata(base.BaseTest):

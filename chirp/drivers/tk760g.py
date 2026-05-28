@@ -18,6 +18,7 @@ import struct
 import time
 
 from chirp import chirp_common, directory, memmap, errors, util, bitwise
+from chirp import checksum
 from chirp.settings import RadioSettingGroup, RadioSetting, \
     RadioSettingValueBoolean, RadioSettingValueList, \
     RadioSettingValueString, RadioSettingValueInteger, \
@@ -267,7 +268,6 @@ MEM_BLOCKS = list(range(0, BLOCKS))
 # define and empty block of data, as it will be used a lot in this code
 EMPTY_BLOCK = b"\xFF" * 256
 
-RO_BLOCKS = list(range(0x10, 0x1F)) + list(range(0x59, 0x5f))
 ACK_CMD = b"\x06"
 
 POWER_LEVELS = [chirp_common.PowerLevel("Low", watts=1),
@@ -363,14 +363,6 @@ def _close_radio(radio):
     _raw_send(radio, b"E")
 
 
-def _checksum(data):
-    """the radio block checksum algorithm"""
-    cs = 0
-    for byte in data:
-        cs += byte
-    return cs % 256
-
-
 def _make_frame(cmd, addr):
     """Pack the info in the format it likes"""
     return struct.pack(">BH", ord(cmd), addr)
@@ -418,7 +410,7 @@ def _recv(radio):
     # when the RX block has two bytes and the first is \x5A
     # then the block is all \xFF
     if not cmd:
-        raise errors.RadioError('No response from radio')
+        raise errors.RadioNoResponse()
     elif cmd == b'Z':
         # Empty "zero" block
         _raw_recv(radio, 1)
@@ -433,7 +425,7 @@ def _recv(radio):
         rxdata = _raw_recv(radio, BLOCK_SIZE + 1)
         rcs = rxdata[-1]
         data = rxdata[:-1]
-        ccs = _checksum(data)
+        ccs = checksum.checksum_8bit(data)
 
         if rcs != ccs:
             _close_radio(radio)
@@ -463,6 +455,9 @@ def _open_radio(radio, status):
 
     _raw_send(radio, b"PROGRAM")
     ack = _raw_recv(radio, 1)
+    if not ack:
+        _close_radio(radio)
+        raise errors.RadioNoResponse()
     if ack != ACK_CMD:
         _close_radio(radio)
         LOG.debug("Radio did not accept PROGRAM command")
@@ -474,7 +469,11 @@ def _open_radio(radio, status):
     _raw_send(radio, b"\x02")
     rid = _raw_recv(radio, 8)
 
-    if not (radio.TYPE in rid):
+    # See issue #12227 and associated ones. Some strange (potentially
+    # pre-release) models seem to identify with a lowercase form factor
+    # character. Allow these and let the variant check sort out the
+    # differences).
+    if not (radio.TYPE in rid.upper()):
         # bad response, properly close the radio before exception
         _close_radio(radio)
 
@@ -563,7 +562,7 @@ def do_upload(radio):
 
         # The blocks from x59-x5F are NOT programmable
         # The blocks from x11-x1F are written only if not empty
-        if addr in RO_BLOCKS:
+        if addr in radio.RO_BLOCKS:
             # checking if in the range of optional blocks
             if addr >= 0x10 and addr <= 0x1F:
                 # block is empty ?
@@ -581,7 +580,7 @@ def do_upload(radio):
         if data == EMPTY_BLOCK:
             frame = _make_frame(b"Z", addr) + b"\xFF"
         else:
-            cs = _checksum(data)
+            cs = checksum.checksum_8bit(data)
             frame = _make_frame(b"W", addr) + data + bytes([cs])
 
         _raw_send(radio, frame)
@@ -661,8 +660,8 @@ class memBank(chirp_common.Bank):
     index = 0
 
 
-class Kenwood_Serie_60G(chirp_common.CloneModeRadio,
-                        chirp_common.ExperimentalRadio):
+class Kenwood_Series_60G(chirp_common.CloneModeRadio,
+                         chirp_common.ExperimentalRadio):
     """Kenwood Series 60G Radios base class"""
     VENDOR = "Kenwood"
     BAUD_RATE = 9600
@@ -676,6 +675,7 @@ class Kenwood_Serie_60G(chirp_common.CloneModeRadio,
     _kind = ""
     VARIANT = ""
     MODEL = ""
+    RO_BLOCKS = list(range(0x10, 0x1F)) + list(range(0x59, 0x5f))
 
     @classmethod
     def get_prompts(cls):
@@ -855,6 +855,8 @@ class Kenwood_Serie_60G(chirp_common.CloneModeRadio,
         # chirp signature on the eprom ;-)
         sign = b"Chirp"
         self._fill(0xbb, sign)
+        if self._memobj is None:
+            self.process_mmap()
 
         try:
             self._prep_data()
@@ -1069,12 +1071,7 @@ class Kenwood_Serie_60G(chirp_common.CloneModeRadio,
             except IndexError:
                 _mem.name[i] = "\x20"
 
-        # power
-        # default power is low
-        if mem.power is None:
-            mem.power = POWER_LEVELS[0]
-
-        _mem.power = POWER_LEVELS.index(mem.power)
+        _mem.power = POWER_LEVELS.index(mem.power or POWER_LEVELS[0])
 
         # wide/marrow
         _mem.wide = MODES.index(mem.mode)
@@ -1483,7 +1480,7 @@ class Kenwood_Serie_60G(chirp_common.CloneModeRadio,
 
 
 @directory.register
-class TK868G_Radios(Kenwood_Serie_60G):
+class TK868G_Radios(Kenwood_Series_60G):
     """Kenwood TK-868G Radio M/C"""
     MODEL = "TK-868G"
     TYPE = b"M8680"
@@ -1496,7 +1493,7 @@ class TK868G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK862G_Radios(Kenwood_Serie_60G):
+class TK862G_Radios(Kenwood_Series_60G):
     """Kenwood TK-862G Radio K/E/(N)E"""
     MODEL = "TK-862G"
     TYPE = b"M8620"
@@ -1509,7 +1506,7 @@ class TK862G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK860G_Radios(Kenwood_Serie_60G):
+class TK860G_Radios(Kenwood_Series_60G):
     """Kenwood TK-860G Radio K"""
     MODEL = "TK-860G"
     TYPE = b"M8600"
@@ -1524,7 +1521,7 @@ class TK860G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK768G_Radios(Kenwood_Serie_60G):
+class TK768G_Radios(Kenwood_Series_60G):
     """Kenwood TK-768G Radios [M/C]"""
     MODEL = "TK-768G"
     TYPE = b"M7680"
@@ -1538,7 +1535,7 @@ class TK768G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK762G_Radios(Kenwood_Serie_60G):
+class TK762G_Radios(Kenwood_Series_60G):
     """Kenwood TK-762G Radios [K/E/NE]"""
     MODEL = "TK-762G"
     TYPE = b"M7620"
@@ -1552,7 +1549,7 @@ class TK762G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK760G_Radios(Kenwood_Serie_60G):
+class TK760G_Radios(Kenwood_Series_60G):
     """Kenwood TK-760G Radios [K/M/(N)E]"""
     MODEL = "TK-760G"
     TYPE = b"M7600"
@@ -1565,7 +1562,7 @@ class TK760G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK388G_Radios(Kenwood_Serie_60G):
+class TK388G_Radios(Kenwood_Series_60G):
     """Kenwood TK-388 Radio [K/E/M/NE]"""
     MODEL = "TK-388G"
     TYPE = b"P3880"
@@ -1575,7 +1572,7 @@ class TK388G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK378G_Radios(Kenwood_Serie_60G):
+class TK378G_Radios(Kenwood_Series_60G):
     """Kenwood TK-378 Radio [K/E/M/NE]"""
     MODEL = "TK-378G"
     TYPE = b"P3780"
@@ -1588,21 +1585,21 @@ class TK378G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK372G_Radios(Kenwood_Serie_60G):
-    """Kenwood TK-372 Radio [K/E/M/NE]"""
+class TK372G_Radios(Kenwood_Series_60G):
+    """Kenwood TK-372G Radio [K/K2/K3/K4]"""
     MODEL = "TK-372G"
     TYPE = b"P3720"
     VARIANTS = {
-        b"P3720\x06\xff": (32, 450, 470, "K"),
-        b"P3720\x07\xff": (32, 470, 490, "K1"),
-        b"P3720\x08\xff": (32, 490, 512, "K2"),
-        b"P3720\x09\xff": (32, 403, 430, "K3")
+        b"P3720\x06\xfb": (32, 450, 470, "K"),
+        b"P3720\x07\xfb": (32, 470, 490, "K2"),
+        b"P3720\x08\xfb": (32, 490, 512, "K3"),
+        b"P3720\x09\xfb": (32, 403, 430, "K4")
         }
 
 
 @directory.register
-class TK370G_Radios(Kenwood_Serie_60G):
-    """Kenwood TK-370 Radio [K/E/M/NE]"""
+class TK370G_Radios(Kenwood_Series_60G):
+    """Kenwood TK-370G Radio [K/E/M/NE]"""
     MODEL = "TK-370G"
     TYPE = b"P3700"
     VARIANTS = {
@@ -1620,7 +1617,7 @@ class TK370G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK360G_Radios(Kenwood_Serie_60G):
+class TK360G_Radios(Kenwood_Series_60G):
     """Kenwood TK-360 Radio [K/E/M/NE]"""
     MODEL = "TK-360G"
     TYPE = b"P3600"
@@ -1640,7 +1637,7 @@ class TK360G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK278G_Radios(Kenwood_Serie_60G):
+class TK278G_Radios(Kenwood_Series_60G):
     """Kenwood TK-278G Radio C/C1/M/M1"""
     MODEL = "TK-278G"
     TYPE = b"P2780"
@@ -1654,7 +1651,7 @@ class TK278G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK272G_Radios(Kenwood_Serie_60G):
+class TK272G_Radios(Kenwood_Series_60G):
     """Kenwood TK-272G Radio K/K1"""
     MODEL = "TK-272G"
     TYPE = b"P2720"
@@ -1667,7 +1664,7 @@ class TK272G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK270G_Radios(Kenwood_Serie_60G):
+class TK270G_Radios(Kenwood_Series_60G):
     """Kenwood TK-270G Radio K/K1/M/E/NE/NT"""
     MODEL = "TK-270G"
     TYPE = b"P2700"
@@ -1681,16 +1678,19 @@ class TK270G_Radios(Kenwood_Serie_60G):
 
 
 @directory.register
-class TK260G_Radios(Kenwood_Serie_60G):
+class TK260G_Radios(Kenwood_Series_60G):
     """Kenwood TK-260G Radio K/K1/M/E/NE/NT"""
     MODEL = "TK-260G"
     _hasbanks = False
     TYPE = b"P2600"
+    RO_BLOCKS = list(range(0x10, 0x1F)) + list(range(0x52, 0x5f))
     VARIANTS = {
         b"P2600U\xff":    (8, 136, 150, "N1"),
         b"P2600T\xff":    (8, 146, 174, "N"),
         b"P2600$\xff":    (8, 150, 174, "E"),
         b"P2600\x14\xff": (8, 150, 174, "M"),
         b"P2600\x05\xff": (8, 136, 150, "K1"),
-        b"P2600\x04\xff": (8, 150, 174, "K")
+        b"P2600\x04\xff": (8, 150, 174, "K"),
+        # See issue #12227 for discussion of this odd variant
+        b"p2600\x24\xfb": (8, 150, 174, "E?"),
         }

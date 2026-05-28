@@ -15,6 +15,10 @@ Baiston:
 Baofeng/Pofung:
 - alt: K6
   model: K61
+- alt: K6
+  model: K63
+- alt: K6
+  model: K6A
 - alt: 5RM
   model: Baofeng AR-5RM
 - alt: BF-1901
@@ -324,6 +328,12 @@ Wouxun:
   model: KG-UV9P
 - alt: Wouxun KG-UV9D Plus
   model: KG-UV9D Mate
+- alt: Wouxun KG-UV9PX
+  model: KG-UV9PX Plus
+- alt: Wouxun KG-UV9PX
+  model: KG-UV9DX
+- alt: Wouxun KG-UV9GX
+  model: KG-UV9GX Plus
 Wurui:
 - alt: Abbree AR-63
   model: G63
@@ -366,3 +376,6 @@ Quansheng:
 Powerful:
 - alt: Quansheng UV-K5
   model: UV-S5
+Pxton:
+- alt: Baofeng MP31
+  model: 999S

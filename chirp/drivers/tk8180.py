@@ -18,7 +18,7 @@ import time
 import logging
 from collections import OrderedDict
 
-from chirp import chirp_common, directory, memmap, errors, util
+from chirp import chirp_common, directory, memmap, errors, util, checksum
 from chirp import bitwise
 from chirp.drivers import tk280
 from chirp.settings import MemSetting, RadioSettingValueInvertedBoolean
@@ -405,10 +405,14 @@ def do_ident(radio):
     send(radio, b'PROGRAM')
     ack = radio.pipe.read(1)
     LOG.debug('Read %r from radio' % ack)
+    if not ack:
+        raise errors.RadioNoResponse()
     if ack != b'\x16':
         raise errors.RadioError('Radio refused hi-speed program mode')
     radio.pipe.baudrate = 19200
     ack = radio.pipe.read(1)
+    if not ack:
+        raise errors.RadioNoResponse()
     if ack != b'\x06':
         raise errors.RadioError('Radio refused program mode')
     radio.pipe.write(b'\x02')
@@ -416,6 +420,8 @@ def do_ident(radio):
     LOG.debug('Radio ident is %r' % ident)
     radio.pipe.write(b'\x06')
     ack = radio.pipe.read(1)
+    if not ack:
+        raise errors.RadioNoResponse()
     if ack != b'\x06':
         raise errors.RadioError('Radio refused program mode')
     if ident[:6] not in (radio._model,):
@@ -425,13 +431,6 @@ def do_ident(radio):
         if model == 'P3180':
             model += ' ' + variants.get(ident[5], '(Unknown)')
         raise errors.RadioError('Unsupported radio model %s' % model)
-
-
-def checksum_data(data):
-    _chksum = 0
-    for byte in data:
-        _chksum = (_chksum + byte) & 0xFF
-    return _chksum
 
 
 def do_download(radio):
@@ -471,7 +470,7 @@ def do_download(radio):
         if len(chksum) != 1:
             LOG.error('Checksum was %r' % chksum)
             raise errors.RadioError('Radio sent invalid checksum')
-        _chksum = checksum_data(chunk)
+        _chksum = checksum.checksum_8bit(chunk)
 
         if chunk and _chksum != ord(chksum):
             LOG.error(
@@ -525,8 +524,8 @@ def do_upload(radio):
             send(radio, make_frame('Z', block, b'\xFF'))
         else:
             radio.pipe.log('Sending block %i' % block)
-            checksum = checksum_data(chunk)
-            send(radio, make_frame('W', block, chunk + bytes([checksum])))
+            cs = checksum.checksum_8bit(chunk)
+            send(radio, make_frame('W', block, chunk + bytes([cs])))
 
         ack = radio.pipe.read(1)
         if ack != b'\x06':
@@ -602,6 +601,9 @@ class KenwoodTKx180Radio(chirp_common.CloneModeRadio):
     def sync_out(self):
         try:
             do_upload(self)
+        except errors.RadioError:
+            reset(self)
+            raise
         except Exception as e:
             reset(self)
             LOG.exception('General failure')

@@ -250,7 +250,7 @@ def _enter_programming_mode_download(radio):
         raise errors.RadioError("Error communicating with radio")
 
     if not ack:
-        raise errors.RadioError("No response from radio")
+        raise errors.RadioNoResponse()
     elif ack != CMD_ACK:
         raise errors.RadioError("Radio refused to enter programming mode")
 
@@ -311,7 +311,7 @@ def _enter_programming_mode_upload(radio):
         raise errors.RadioError("Error communicating with radio")
 
     if not ack:
-        raise errors.RadioError("No response from radio")
+        raise errors.RadioNoResponse()
     elif ack != CMD_ACK:
         raise errors.RadioError("Radio refused to enter programming mode")
 
@@ -446,7 +446,9 @@ class RA87StyleRadio(chirp_common.CloneModeRadio):
     VALID_BANDS = [(400000000, 480000000)]
 
     _magic = b"PROGRAM"
-    _fingerprint = [b"\xFF\xFF\xFF\xFF\xFF\xA5\x2C\xFF"]
+    _fingerprint = [b"\xFF\xFF\xFF\xFF\xFF\xA5\x2C\xFF",
+                    b"\xFF\xFF\xFF\xFF\xFF\xA5\x26\xFF",
+                    ]
     _upper = 99
     _gmrs = True
     _echo = True
@@ -519,10 +521,10 @@ class RA87StyleRadio(chirp_common.CloneModeRadio):
             _exit_programming_mode(self)
 
     def _get_dcs(self, val):
-        return int(str(val)[2:-16])
+        return val.get_bbcd()
 
     def _set_dcs(self, val):
-        return int(str(val), 16)
+        return bitwise.dec_to_bbcd(val)
 
     def _memory_obj(self, suffix=""):
         return getattr(self._memobj, "%s_memory%s" % (self._vfo, suffix))

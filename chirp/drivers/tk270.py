@@ -166,6 +166,8 @@ def handshake(radio, msg="", full=False):
     # receive ACK
     ack = rawrecv(radio, 1)
     # check ACK
+    if not ack:
+        raise errors.RadioNoResponse()
     if ack != ACK_CMD:
         # close_radio(radio)
         mesg = "Handshake failed: " + msg
@@ -377,6 +379,8 @@ class Kenwood_P60_Radio(chirp_common.CloneModeRadio, chirp_common.ExperimentalRa
     def sync_out(self):
         """Upload to radio"""
         # Get the data ready for upload
+        if self._memobj is None:
+            self.process_mmap()
         try:
             self._prep_data()
         except Exception as e:
@@ -645,11 +649,7 @@ class Kenwood_P60_Radio(chirp_common.CloneModeRadio, chirp_common.ExperimentalRa
         self.encode_tone(_mem.tx_tone, txmode, txtone, txpol)
         self.encode_tone(_mem.rx_tone, rxmode, rxtone, rxpol)
 
-        # power, default power is high, as the low is configurable via a key
-        if mem.power is None:
-            mem.power = POWER_LEVELS[1]
-
-        _mem.power = POWER_LEVELS.index(mem.power)
+        _mem.power = POWER_LEVELS.index(mem.power or POWER_LEVELS[1])
 
         # skip
         self.set_scan(mem.number - 1, mem.skip)

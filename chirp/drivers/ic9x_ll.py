@@ -156,7 +156,7 @@ class IC92Frame:
             response = ic9x_recv(pipe)
 
         if not response:
-            raise errors.InvalidDataError("No response from radio")
+            raise errors.RadioNoResponse()
 
         return response[0]
 
@@ -179,7 +179,7 @@ class IC92GetBankFrame(IC92Frame):
         rframes = ic9x_send(pipe, self.get_raw())
 
         if len(rframes) == 0:
-            raise errors.InvalidDataError("No response from radio")
+            raise errors.RadioNoResponse()
 
         return rframes
 
@@ -345,13 +345,15 @@ class IC92MemoryFrame(IC92Frame):
         """Take Memory object @mem and configure the frame accordingly"""
         if mem.number < 0:
             self.set_iscall(True)
-            mem.number = abs(mem.number) - 1
+            number = abs(mem.number) - 1
             LOG.debug("Memory is %i (call %s)" %
                       (mem.number, self.get_iscall()))
+        else:
+            number = mem.number
 
         _mem = bitwise.parse(MEMORY_FRAME_FORMAT, self).mem
 
-        _mem.number = mem.number
+        _mem.number = number
 
         _mem.freq = mem.freq
         _mem.offset = mem.offset
@@ -444,7 +446,7 @@ def get_memory(pipe, vfo, number):
     rframe = get_memory_frame(pipe, vfo, number)
 
     if len(rframe.get_payload()) < 1:
-        raise errors.InvalidMemoryLocation("No response from radio")
+        raise errors.RadioError("Unexpected empty response from radio")
 
     if rframe.get_payload()[3] == b'\xff':
         raise errors.InvalidMemoryLocation("Radio says location is empty")

@@ -644,14 +644,17 @@ class DVMemory(Memory):
             self.dv_code = 0
 
 
-def FrozenMemory(source):
+def FrozenMemory(source, strict=True):
     class _FrozenMemory(source.__class__):
         def __init__(self, source):
             self.__dict__['_frozen'] = False
             for k, v in source.__dict__.items():
                 if k == '_frozen':
                     continue
-                setattr(self, k, v)
+                try:
+                    setattr(self, k, v)
+                except ValueError:
+                    pass
 
             self.__dict__['_frozen'] = True
             for i in self.extra:
@@ -660,13 +663,17 @@ def FrozenMemory(source):
         def __setattr__(self, k, v):
             if self._frozen:
                 # This should really be an error, but we have a number of
-                # drivers that make modifications during set_memory(). So this
-                # just has to be a warning for now. Later it could turn into
-                # a TypeError.
+                # drivers that make modifications during set_memory(). If we
+                # are not being strict, then we just log a warning.
                 caller = inspect.getframeinfo(inspect.stack()[1][0])
                 LOG.warning(
                     '%s@%i: Illegal set on attribute %s - Fix this driver!' % (
                         caller.filename, caller.lineno, k))
+                if strict:
+                    raise errors.FrozenMemoryError(
+                        _('Internal driver error: Attempt to modify '
+                          'frozen memory; Please report this as a bug using '
+                          '"Report or update a bug" in the Help menu'))
             super().__setattr__(k, v)
 
         def dupe(self):
@@ -1067,9 +1074,32 @@ class RadioFeatures:
     def __getitem__(self, name):
         return self.__dict__[name]
 
+    @property
+    def concise_bands(self):
+        pp_range_strings = [
+            format_freq(lo).rstrip('0').rstrip('.') +
+            '-' +
+            format_freq(hi).rstrip('0').rstrip('.') +
+            'MHz'
+            for lo, hi in self.valid_bands]
+        return ', '.join(pp_range_strings)
+
     def validate_memory(self, mem):
         """Return a list of warnings and errors that will be encountered
-        if trying to set @mem on the current radio"""
+        if trying to set @mem on the current radio.
+
+        An Error will abort the edit, while a Warning will allow it. Both
+        will show a message to the user. Use Errors to reject things that
+        need to be. A Warning is useful to alert the user that something
+        will be fixed/changed/coerced by the driver and that they should
+        expect it to look different than what they entered. Use these
+        sparingly as they can be very annoying to the user if they happen
+        on every edit.
+
+        NOTE: This method MAY NOT modify @mem in any way. It is not a hook
+        to make changes, it is for _validation_ of the memory before it is
+        sent to the driver's set_memory() method.
+        """
         msgs = []
 
         lo, hi = self.memory_bounds
@@ -1138,7 +1168,9 @@ class RadioFeatures:
             if not valid:
                 msg = ValidationError(
                     ("Frequency {freq} is out "
-                     "of supported range").format(freq=format_freq(mem.freq)))
+                     "of supported ranges {ranges}").format(
+                         freq=format_freq(mem.freq),
+                         ranges=self.concise_bands))
                 msgs.append(msg)
 
         if self.valid_bands and \
@@ -1187,6 +1219,13 @@ class RadioFeatures:
                                                   "`%s'" % char +
                                                   " not supported"))
                     break
+
+        if is_airband(mem.freq):
+            try:
+                fix_rounded_step(mem.freq)
+            except errors.InvalidDataError as e:
+                msgs.append(ValidationError(
+                    '%s: %s' % (format_freq(mem.freq), e)))
 
         return msgs
 
@@ -1469,11 +1508,19 @@ class DetectableInterface:
         return extra + list(detected)
 
     @classmethod
+    def is_detected(cls):
+        return getattr(cls, '_DETECTED_BY', None) is not None
+
+    @classmethod
     def detect_model(cls, detected_cls):
         detected_attr = class_detected_models_attribute(cls)
         if getattr(cls, detected_attr, None) is None:
             setattr(cls, detected_attr, [])
         getattr(cls, detected_attr).append(detected_cls)
+
+    @classmethod
+    def is_minor_variant(cls):
+        return getattr(cls, '_MINOR_VARIANT', False)
 
 
 class CloneModeRadio(FileBackedRadio, ExternalMemoryProperties,
@@ -1751,7 +1798,7 @@ def is_2_5(freq):
 
 def is_8_33(freq):
     """Returns True if @freq is reachable by a 8.33 kHz step"""
-    return (freq % 25000) in [0, 8330, 16660]
+    return (freq % 25000) in [8330, 8333, 16660, 16666]
 
 
 def is_1_0(freq):
@@ -1789,10 +1836,66 @@ def required_step(freq, allowed=None):
                                   "tuning step for %s" % format_freq(freq))
 
 
+def is_airband(freq):
+    """Returns True if @freq is in the airband range"""
+    return in_range(freq, [(to_MHz(108), to_MHz(137))])
+
+
 def fix_rounded_step(freq):
     """Some radios imply the last bit of 12.5 kHz and 6.25 kHz step
     frequencies. Take the base @freq and return the corrected one"""
     allowed = [12.5, 6.25]
+
+    if is_airband(freq):
+        # Airband can be 25kHz or 8.33kHz (25k / 3) steps
+        # https://en.wikipedia.org/wiki/Airband
+        if freq % 25000:
+            # This must be 8.33kHz. The goal here is to find the closest
+            # 8.33k-aligned channel and return that.
+            # In the 8.33kHz channel scheme, there are "channel names" that
+            # look like 5kHz-aligned frequencies within the 25kHz regular
+            # channels, which don't match the actual frequency being used
+            # (which is 8.33kHz-aligned). We need to be able to detect those
+            # and return the correct actual frequency, as well as allow
+            # matching the actual frequencies themselves.
+
+            # The "base frequency" is the 25kHz-aligned channel frequency that
+            # has been divided into three 8.33kHz channels.
+            base = freq // 25000 * 25000
+            orig = freq
+
+            # This is a channel name if it is 5kHz-aligned and equal-or-above
+            # the base frequency. Adjust down for the lower channel and up for
+            # the upper (no adjustment for the middle one) so that the channel
+            # matching below will find the right closest option.
+            ch_index = (freq - base) / 5000
+            if ch_index == 1.0:
+                # Lower of the three, bump down
+                freq -= (25000 // 3)
+            elif ch_index == 3.0:
+                # Upper of the three, bump up
+                freq += (25000 // 3)
+            elif ch_index >= 4.0 and ch_index == int(ch_index):
+                # This is 5kHz-aligned but not one of the three sub-channels,
+                # thus this is one of the gaps in the channel numbers. Refuse
+                # it so that it's clear to the user.
+                raise errors.InvalidDataError(
+                    _('Aircraft frequencies must be aligned to 25kHz, 8.33kHz'
+                      ', be or a valid channel'))
+
+            # These are the three possible 8.33kHz-aligned channels within
+            # this 25kHz block.
+            channels = [base + (25000 // 3) * i for i in range(0, 3)]
+
+            # Find the closest one to the original frequency
+            best = min(channels, key=lambda x: abs(x - freq))
+            LOG.debug('833: Orig %s Channels %s best %s adjusted %s diffs %s '
+                      'chindex %s' % (
+                          orig, channels, best, freq,
+                          [x - freq for x in channels], ch_index))
+            return best
+        else:
+            return freq
 
     try:
         required_step(freq + 500, allowed=allowed)
@@ -1860,32 +1963,32 @@ def name16(name, just_upper=False):
 
 def to_GHz(val):
     """Convert @val in GHz to Hz"""
-    return val * 1000000000
+    return int(val * 1000000000)
 
 
 def to_MHz(val):
     """Convert @val in MHz to Hz"""
-    return val * 1000000
+    return int(val * 1000000)
 
 
 def to_kHz(val):
     """Convert @val in kHz to Hz"""
-    return val * 1000
+    return int(val * 1000)
 
 
 def from_GHz(val):
     """Convert @val in Hz to GHz"""
-    return val // 100000000
+    return val // 1000000000
 
 
 def from_MHz(val):
     """Convert @val in Hz to MHz"""
-    return val // 100000
+    return val // 1000000
 
 
 def from_kHz(val):
     """Convert @val in Hz to kHz"""
-    return val // 100
+    return val // 1000
 
 
 def split_to_offset(mem, rxfreq, txfreq):

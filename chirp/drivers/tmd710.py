@@ -71,13 +71,10 @@ def _command(ser, cmd, rsplen, w8t=0.01):
     rsplen is expected response char count, NOT incl prefix and term
     If rsplen = 0 then do not0 read after write """
     ser.write(cmd)
-    LOG.debug(" Out %4i ->: %s" % (len(cmd), util.hexprint(cmd[0: 32])))
     time.sleep(w8t)
     result = b""
     if rsplen > 0:  # read response
         result = ser.read(rsplen)
-        LOG.debug(" In %4i <-: %s" % (len(result),
-                                      util.hexprint(result[0: 32])))
     return result
 
 
@@ -85,7 +82,7 @@ def _connect_radio(radio):
     """Determine baud rate and verify radio on-line"""
     global BAUD
     xid = "D710" + radio.SHORT
-    resp = kenwood_live.KenwoodLiveRadio().get_id(radio.pipe)
+    resp = kenwood_live.KenwoodLiveRadio(None).get_id(radio.pipe)
     BAUD = radio.pipe.baudrate      # As detected by kenwood_live
     LOG.debug("Got [%s] at %i Baud." % (resp, BAUD))
     resp = resp[3:]     # Strip "ID " prefix
@@ -95,7 +92,9 @@ def _connect_radio(radio):
         else:
             stx = "Radio responded as %s, not %s." % (resp, xid)
             raise errors.RadioError(stx)
-    raise errors.RadioError("No response from radio")
+    if resp:
+        raise errors.RadioError("Unexpected response from radio")
+    raise errors.RadioNoResponse()
 
 
 def _update_status(self, status, step=1):
@@ -211,6 +210,8 @@ class KenwoodTMx710Radio(chirp_common.CloneModeRadio):
         try:
             _connect_radio(self)
             self._write_mem()
+        except errors.RadioError:
+            raise
         except Exception:
             # If anything unexpected happens, make sure we raise
             # a RadioError and log the problem
@@ -393,8 +394,6 @@ class KenwoodTMx710Radio(chirp_common.CloneModeRadio):
                 _mem.tmode = 0x0a
             if mem.tmode == "DTCS":
                 _mem.tmode = 0x09
-        if mem.duplex == "n/a":     # Not valid
-            mem.duplex = ""
         _mem.duplex = TMD710_DUPLEX.index(mem.duplex)
         _mem.offset = mem.offset
         _mem.tstep = TMD710_STEPS.index(mem.tuning_step)

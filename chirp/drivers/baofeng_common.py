@@ -212,10 +212,12 @@ def _do_ident(radio, magic):
     _rawsend(radio, magic)
 
     ack = _rawrecv(radio, 1)
+    if not ack:
+        raise errors.RadioNoResponse()
     if ack != b"\x06":
         if ack:
             LOG.debug(repr(ack))
-        raise errors.RadioError("Radio did not respond")
+        raise errors.RadioError("Unexpected response from radio")
 
     _rawsend(radio, b"\x02")
 
@@ -256,7 +258,7 @@ def _ident_radio(radio):
             time.sleep(2)
     if error:
         raise error
-    raise errors.RadioError("Radio did not respond")
+    raise errors.RadioNoResponse()
 
 
 def _download(radio):
@@ -529,7 +531,7 @@ class BaofengCommonHT(chirp_common.CloneModeRadio,
         raw_tx = b""
         for i in range(0, 4):
             raw_tx += _mem.txfreq[i].get_raw()
-        return raw_tx == b"\xFF\xFF\xFF\xFF"
+        return raw_tx in (b"\xFF\xFF\xFF\xFF", b"\x00\x00\x00\x00")
 
     def get_memory(self, number):
         _mem = self._memobj.memory[number]
