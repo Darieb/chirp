@@ -3,6 +3,7 @@
 # Copyright 2023 Declan Rieb <WD5EQY@arrl.net>
 # Sections of digital settings applied from ft70.py, thus
 # Copyright 2017 Nicolas Pike <nick@zbm2.com>
+# Copyright 2026 Declan Rieb <WD5EQY@arrl.net>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -734,7 +735,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     MODEL = "FT-1D"
     VARIANT = "R"
     _model = b"AH44M"
-    _model_hd = _model + b'\xc0\xfd\x01\x00\x02\x00\x00'
+    _model_hd = _model + b'\xc0\xfd\x01\x00\x02'
     _adms_ext = '.ft1d'
     _adms_ext_ID = 'FT1D ADMS'
     _adms_ID = b'adms,'
@@ -910,20 +911,21 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     @classmethod
     def match_model(cls, filedata : bytearray, filename: str) -> bool:
         ''' Both ADMS and sd-card files may have ADMS enclitics '''
-        print(f'match_model: {cls._adms_ID}')
+        print(f'match_model: {cls._model}')
         if filename.lower().endswith(cls._adms_ext):
             print(f'filename matches {cls._adms_ext}')
             if cls._adms_ID in filedata:
                 print(f'match_model: {cls._adms_ID} in filedata')
                 return True
+        # sd-card BACKUP.dat file
         elif filename.endswith(cls._sdcd_ext):
-            print(f'filename matches {cls._sdcd_ext}')
+            print(f'filename matches {cls._sdcd_ext}. Looking for: '
+                  f'{cls._adms_ID} or {cls._model}')
             if cls._adms_ID in filedata:
                 print(f'match_model: {cls._adms_ID} in filedata')
                 return True
-            # unfortunately, FT-1D has no internal diagnostic, AFAICT
-            if cls._adms_ext == '.ft1d':
-                print(f'match_model: {cls._adms_ext} ASSUMED!')
+            if cls._model in filedata:
+                print(f'match_model: {cls._model} in filedata')
                 return True
         print(f'This match_model returns False {filename}')
         return super().match_model(filedata, filename)
@@ -1953,11 +1955,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         wxc = self._memobj.WiresX_settings
         for i in range(0, 5):
             cname = "WiresX_settings.Category[%d].name" % (i + 1)
-            c = ''
-            for j in range(0, 16):
-                s = wxc.Category[i].name[j]
-                if int(s) != 0xff:
-                    c = c + str(s)
+            c = chirp_common.sanitize_string(str(wxc.Category[i].name))
             val = RadioSettingValueString(0, 16, c)
             rs = RadioSetting(cname, "Category %d" % (i+1), val)
             rs.set_apply_callback(self.apply_WiresX_category,
@@ -2601,6 +2599,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         if filename.lower().endswith(self._adms_ext):
             with open(filename, 'rb') as f:
                 self._adms_header = f.read(self._adms_head_len)
+                print(f'load_mmap ADMS header: '
+                      f'len={self._adms_head_len}, {self._adms_header}')
                 LOG.debug('ADMS Header:\n%s',
                           util.hexprint(self._adms_header))
                 self._mmap = memmap.MemoryMapBytes(self._model + f.read())
@@ -2608,11 +2608,10 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             self.process_mmap()
         elif filename.endswith(self._sdcd_ext):
             with open(filename, 'rb') as f:
-                # self._sdcd_header = f.read(0x16)
                 self._mmap = memmap.MemoryMapBytes(self._model_hd + f.read())
             self.process_mmap()
         else:
-            chirp_common.CloneModeRadio.load_mmap(self, filename)
+            super().load_mmap(filename)
 
     def save_mmap(self, filename: str) -> None:
         """ Write raw image to file.

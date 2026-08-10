@@ -1,6 +1,7 @@
 # Copyright 2010 Dan Smith <dsmith@danplanet.com>
 # Portions Copyright 2017 Wade Simmons <wade@wades.im>
 # Copyright 2017 Declan Rieb <darieb@comcast.net>
+# Copyright 2026 Declan Rieb <darieb@comcast.net>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,11 +20,8 @@ import logging
 
 from chirp.drivers import ft1d
 from chirp import chirp_common, directory
-from chirp import errors
-from chirp import memmap
 from chirp.settings import RadioSetting
 from chirp.settings import RadioSettingValueString
-from chirp import util
 
 # Differences from Yaesu FT1D
 #  Text in memory and memory bank structures is ASCII encoded
@@ -72,6 +70,15 @@ class FT2D(ft1d.FT1Radio):
     VARIANT = "R"
 
     _model = b"AH60M"  # Get this from chirp .img file after saving once
+    _model_hd = _model + b'\xc0\xfd\x01\x00\x02'
+    _adms_ext = '.ft2d'
+    _adms_ext_ID = 'FT2D ADMS'
+    _admn_ID = b'Adms8'
+    _adms_head_len = 0x16
+    _sdcd_ext = 'BACKUP.dat'
+    FORMATS = [directory.register_format(_adms_ext_ID, f'*{_adms_ext}'),
+               directory.register_format('Yaesu SD-CARD', f'*{_sdcd_ext}')]
+    CHARSET = [ascii(i) for i in range(128)]
     _has_vibrate = True
     MAX_MEM_SLOTS = 900
     _mem_params = {
@@ -79,7 +86,6 @@ class FT2D(ft1d.FT1Radio):
          "flgnum": 900,            # size of flags array
          "dtmadd": 0x94A,          # address of DTMF strings
          }
-    _adms_ext = '.ft2d'
     _APRS_HIGH_SPEED_MAX = 90
     FORMATS = [directory.register_format('FT2D ADMS-8', '*.ft2d')]
 
@@ -146,6 +152,7 @@ class FT2Dv2(FT2D):
     VARIANT = "Rv2"
 
     _model = b"AH60G"
+    _model_hd = _model + b'\xc0\xfd\x01\x00\x02'
 
 
 @directory.register
@@ -155,22 +162,15 @@ class FT3D(FT2D):
     VARIANT = "R"
 
     _model = b"AH72M"
-    FORMATS = [directory.register_format('FT3D ADMS-11', '*.ft3d')]
+    _model_hd = _model + b'\xc0\xfe\x01\x00\x02'
+    _adms_ext = '.ft3d'
+    _adms_ext_ID = 'FT3D ADMS'
+    _adms_ID = b'ADMS11'
+    _adms_head_len = 0x18c
+    _sdcd_ext = 'BACKUP.dat'
 
-    def load_mmap(self, filename):
-        if filename.lower().endswith('.ft3d'):
-            with open(filename, 'rb') as f:
-                self._adms_header = f.read(0x18C)
-                if b'ADMS11, Version=1.0.0.0' not in self._adms_header:
-                    raise errors.ImageDetectFailed(
-                        'Unsupported version found in ADMS file')
-                LOG.debug('ADMS Header:\n%s',
-                          util.hexprint(self._adms_header))
-                self._mmap = memmap.MemoryMapBytes(f.read())
-                LOG.info('Loaded ADMS-11 file at offset 0x18C')
-            self.process_mmap()
-        else:
-            chirp_common.CloneModeRadio.load_mmap(self, filename)
+    FORMATS = [directory.register_format(_adms_ext_ID, f'*{_adms_ext}'),
+               directory.register_format('Yaesu SD-CARD', f'*{_sdcd_ext}')]
 
     def save_mmap(self, filename):
         if filename.lower().endswith('.ft3d'):
@@ -182,10 +182,3 @@ class FT3D(FT2D):
                 LOG.info('Wrote ADMS-11 file')
         else:
             chirp_common.CloneModeRadio.save_mmap(self, filename)
-
-    @classmethod
-    def match_model(cls, filedata, filename):
-        if filename.endswith('.ft3d'):
-            return True
-        else:
-            return super().match_model(filedata, filename)
