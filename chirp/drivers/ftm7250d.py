@@ -68,7 +68,7 @@ class FTM7250Radio(ft1d.FT1Radio):
     MODEL = "FTM-7250D"
     VARIANT = "R"
 
-    _model = "AH75M"
+    _model = b"AH75M"
     _memsize = 65227
     _block_lengths = [10, 65217]
     _has_vibrate = False

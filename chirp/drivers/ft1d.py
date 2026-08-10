@@ -35,8 +35,16 @@ LOG = logging.getLogger(__name__)
 SETTINGS_FORMAT = """
 // to support SD-card reading
 struct {
-    char a[16];
-    } firstbytes[0x40];
+    char L000[16];
+    char L010[16];
+    char L020[16];
+    char L030[16];
+#seekto 0x0200;
+    char L200[16];
+    char L210[16];
+    char L220[16];
+    char L230[16];
+    } selected_first_bytes;
 
 // Settings
 #seekto 0x047E;
@@ -725,10 +733,17 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     VENDOR = "Yaesu"
     MODEL = "FT-1D"
     VARIANT = "R"
-    FORMATS = [directory.register_format('FT1D ADMS-6', '*.ft1d'),
-               directory.register_format('Yaesu SD-CARD', '*BACKUP.dat')]
-    class_specials = SPECIALS
     _model = b"AH44M"
+    _model_hd = _model + b'\xc0\xfd\x01\x00\x02\x00\x00'
+    _adms_ext = '.ft1d'
+    _adms_ext_ID = 'FT1D ADMS'
+    _adms_ID = b'adms,'
+    _adms_head_len = 0x16
+    _sdcd_ext = 'BACKUP.dat'
+
+    FORMATS = [directory.register_format(_adms_ext_ID, f'*{_adms_ext}'),
+               directory.register_format('Yaesu SD-CARD', f'*{_sdcd_ext}')]
+    class_specials = SPECIALS
     _memsize = 130507
     _block_lengths = [10, 130497]
     _block_size = 32
@@ -740,8 +755,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     }
     _has_vibrate = False
     _has_af_dual = True
-    _adms_ext = '.ft1d'
-    _sdcd_ext = 'BACKUP.dat'
 
     _SG_RE = re.compile(r"(?P<sign>[-+NESW]?)(?P<d>[\d]+)[\s\.,]*"
                         r"(?P<m>[\d]*)[\s\']*(?P<s>[\d]*)")
@@ -895,13 +908,25 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         list(string.digits) + ['-', '/']
 
     @classmethod
-    def match_model(cls, filedata, filename):
-        if filename.endswith(cls._adms_ext):
-            return True
+    def match_model(cls, filedata : bytearray, filename: str) -> bool:
+        ''' Both ADMS and sd-card files may have ADMS enclitics '''
+        print(f'match_model: {cls._adms_ID}')
+        if filename.lower().endswith(cls._adms_ext):
+            print(f'filename matches {cls._adms_ext}')
+            if cls._adms_ID in filedata:
+                print(f'match_model: {cls._adms_ID} in filedata')
+                return True
         elif filename.endswith(cls._sdcd_ext):
-            return True
-        else:
-            return super().match_model(filedata, filename)
+            print(f'filename matches {cls._sdcd_ext}')
+            if cls._adms_ID in filedata:
+                print(f'match_model: {cls._adms_ID} in filedata')
+                return True
+            # unfortunately, FT-1D has no internal diagnostic, AFAICT
+            if cls._adms_ext == '.ft1d':
+                print(f'match_model: {cls._adms_ext} ASSUMED!')
+                return True
+        print(f'This match_model returns False {filename}')
+        return super().match_model(filedata, filename)
 
     @classmethod
     def get_prompts(cls):
@@ -2575,7 +2600,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         """ Read raw image from file """
         if filename.lower().endswith(self._adms_ext):
             with open(filename, 'rb') as f:
-                self._adms_header = f.read(0x16)
+                self._adms_header = f.read(self._adms_head_len)
                 LOG.debug('ADMS Header:\n%s',
                           util.hexprint(self._adms_header))
                 self._mmap = memmap.MemoryMapBytes(self._model + f.read())
@@ -2583,8 +2608,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             self.process_mmap()
         elif filename.endswith(self._sdcd_ext):
             with open(filename, 'rb') as f:
-                self._sdcd_header = f.read(0x16)
-                self._mmap = memmap.MemoryMapBytes(f.read())
+                # self._sdcd_header = f.read(0x16)
+                self._mmap = memmap.MemoryMapBytes(self._model_hd + f.read())
             self.process_mmap()
         else:
             chirp_common.CloneModeRadio.load_mmap(self, filename)
