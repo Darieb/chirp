@@ -922,7 +922,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             if cls._model in filedata:
                 return True
             # FT-1D has NO _model in sd-card file
-            if not b'AH' in filedata:
+            if b'AH' not in filedata:
                 return True
         return super().match_model(filedata, filename)
 
@@ -1516,11 +1516,13 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         aprs_meta = self._memobj.aprs_beacon_meta
 
         for index in range(0, 60):
+            ami = aprs_meta[index]
             # There is probably a more pythonesque way to do this
-            scl = int(aprs_meta[index].sender_callsign[0])
+            scl = int(ami.sender_callsign[0])
             dcl = int(aprs_beacon[index].dst_callsign[0])
             if scl != 255 and scl != 0:  # ignore if empty send call
-                callsign = str(aprs_meta[index].sender_callsign).rstrip("\xFF")
+                callsign = chirp_common.sanitize_string(
+                    str(ami.sender_callsign)).rstrip("\xFF")
                 val = RadioSettingValueString(0, 9, callsign)
                 val.set_mutable(False)
                 rs = RadioSetting(
@@ -1529,7 +1531,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                 menu.append(rs)
 
                 if dcl != 255 and dcl != 0:   # ignore if empty dest call
-                    val = str(aprs_beacon[index].dst_callsign)
+                    val = chirp_common.sanitize_string(
+                        str(aprs_beacon[index].dst_callsign))
                     val = RadioSettingValueString(0, 9, val.rstrip("\xFF"))
                     val.set_mutable(False)
                     rs = RadioSetting(
@@ -1555,10 +1558,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                 menu.append(rs)
 
                 if dcl != 255 and dcl != 0:   # ignore if empty dest call
-                    path = str(aprs_beacon[index].path).replace("\x00", " ")
-                    path = ''.join(c for c in path
-                                   if c in string.printable).strip()
-                    path = str(path).replace("\xE0", "*")
+                    path = chirp_common.sanitize_string(
+                        str(aprs_beacon[index].path))
                     val = RadioSettingValueString(0, 32, path)
                     val.set_mutable(False)
                     rs = RadioSetting(
@@ -1961,14 +1962,11 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             r = wxc.RoomsPerCategory[i]
             rn = False
             for j in range(0, 20):
-                idn = "0"
-                if int(r.Rooms[j].ID[1]) != 0xff:
-                    idn = r.Rooms[j].ID
-                    rn = False
-                elif rn:
-                    break
-                elif j > 0:
-                    rn = True
+                id = str(r.Rooms[j].ID)
+                if id.isnumeric():
+                    idn = int(id)
+                else:
+                    idn = '0'
                 val = RadioSettingValueInteger(0, 99999, int(str(idn)))
                 vname = "WiresX_settings.RoomsperCategory%s" \
                         "Rooms[%d].ID" % (i, j)
@@ -1977,12 +1975,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                 rs.set_apply_callback(self.apply_WiresX_roomid,
                                       r.Rooms[j])
                 WXmenu.append(rs)
-                cn = ''
-                for l in range(0, 16):
-                    s = r.Rooms[j].name[l]
-                    if int(s) != 0xff:
-                        cn = cn + str(s)
-                val = RadioSettingValueString(0, 16, str(cn))
+                cn = chirp_common.sanitize_string(str(r.Rooms[j].name))
+                val = RadioSettingValueString(0, 16, cn)
                 cname = "WiresX_settings.RoomsperCategory%s" \
                         "Rooms[%d].name" % (i, j)
                 rs = RadioSetting(cname, "   Room Name%2s (16 chars)" %
@@ -2596,7 +2590,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             with open(filename, 'rb') as f:
                 self._adms_header = f.read(self._adms_head_len)
                 print(f'load_mmap ADMS header: '
-                      f'len={self._adms_head_len}, {self._adms_header}')
+                      f'len={self._adms_head_len}, {self._adms_header!r}')
                 LOG.debug('ADMS Header:\n%s',
                           util.hexprint(self._adms_header))
                 self._mmap = memmap.MemoryMapBytes(self._model + f.read())
