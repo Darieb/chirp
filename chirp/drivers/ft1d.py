@@ -909,25 +909,21 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         list(string.digits) + ['-', '/']
 
     @classmethod
-    def match_model(cls, filedata : bytearray, filename: str) -> bool:
+    def match_model(cls, filedata: bytearray, filename: str) -> bool:
         ''' Both ADMS and sd-card files may have ADMS enclitics '''
-        print(f'match_model: {cls._model}')
+        # ADMS file
         if filename.lower().endswith(cls._adms_ext):
-            print(f'filename matches {cls._adms_ext}')
             if cls._adms_ID in filedata:
-                print(f'match_model: {cls._adms_ID} in filedata')
                 return True
         # sd-card BACKUP.dat file
         elif filename.endswith(cls._sdcd_ext):
-            print(f'filename matches {cls._sdcd_ext}. Looking for: '
-                  f'{cls._adms_ID} or {cls._model}')
             if cls._adms_ID in filedata:
-                print(f'match_model: {cls._adms_ID} in filedata')
                 return True
             if cls._model in filedata:
-                print(f'match_model: {cls._model} in filedata')
                 return True
-        print(f'This match_model returns False {filename}')
+            # FT-1D has NO _model in sd-card file
+            if not b'AH' in filedata:
+                return True
         return super().match_model(filedata, filename)
 
     @classmethod

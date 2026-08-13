@@ -73,7 +73,7 @@ class FT2D(ft1d.FT1Radio):
     _model_hd = _model + b'\xc0\xfd\x01\x00\x02'
     _adms_ext = '.ft2d'
     _adms_ext_ID = 'FT2D ADMS'
-    _admn_ID = b'Adms8'
+    _adms_ID = b'Adms8'
     _adms_head_len = 0x16
     _sdcd_ext = 'BACKUP.dat'
     FORMATS = [directory.register_format(_adms_ext_ID, f'*{_adms_ext}'),
@@ -166,7 +166,7 @@ class FT3D(FT2D):
     _adms_ext = '.ft3d'
     _adms_ext_ID = 'FT3D ADMS'
     _adms_ID = b'ADMS11'
-    _adms_head_len = 0x18c
+    _adms_head_len = 0x182
     _sdcd_ext = 'BACKUP.dat'
 
     FORMATS = [directory.register_format(_adms_ext_ID, f'*{_adms_ext}'),
