@@ -14,7 +14,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+""" CHIRP driver for Yaesu FTM7250D radio.
+    Depends on CHIRP driver for Yaesu FT1D radio.
+"""
 import logging
 
 from chirp.drivers import yaesu_clone, ft1d
@@ -68,7 +70,7 @@ class FTM7250Radio(ft1d.FT1Radio):
     MODEL = "FTM-7250D"
     VARIANT = "R"
 
-    _model = "AH75M"
+    _model = b"AH75M"
     _memsize = 65227
     _block_lengths = [10, 65217]
     _has_vibrate = False

@@ -1,6 +1,6 @@
 # Copyright 2010 Dan Smith <dsmith@danplanet.com>
 # Copyright 2014 Angus Ainslie <angus@akkea.ca>
-# Copyright 2023,2025 Declan Rieb <WD5EQY@arrl.net>
+# Copyright 2023-2026 Declan Rieb <WD5EQY@arrl.net>
 # Sections of digital settings applied from ft70.py, thus
 # Copyright 2017 Nicolas Pike <nick@zbm2.com>
 #
@@ -33,6 +33,19 @@ from chirp import util
 LOG = logging.getLogger(__name__)
 
 SETTINGS_FORMAT = """
+// to support SD-card reading
+struct {
+    char L000[16];
+    char L010[16];
+    char L020[16];
+    char L030[16];
+#seekto 0x0200;
+    char L200[16];
+    char L210[16];
+    char L220[16];
+    char L230[16];
+    } selected_first_bytes;
+
 // Settings
 #seekto 0x047E;
 struct {
@@ -720,9 +733,19 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     VENDOR = "Yaesu"
     MODEL = "FT-1D"
     VARIANT = "R"
-    FORMATS = [directory.register_format('FT1D ADMS-6', '*.ft1d')]
-    class_specials = SPECIALS
     _model = b"AH44M"
+    # variables to support multi-models of ADMS and sd-card files
+    _model_hd = _model + b'\xc0\xfd\x01\x00\x02'
+    _adms_ext = '.ft1d'
+    _adms_ext_ID = 'FT1D ADMS'
+    _adms_ID = b'adms,'
+    _adms_head_len = 0x16
+    _sdcd_ext = 'BACKUP.dat'
+
+    FORMATS = [directory.register_format(_adms_ext_ID, f'*{_adms_ext}'),
+               directory.register_format('Yaesu SD-CARD', f'*{_sdcd_ext}')]
+
+    class_specials = SPECIALS
     _memsize = 130507
     _block_lengths = [10, 130497]
     _block_size = 32
@@ -734,7 +757,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     }
     _has_vibrate = False
     _has_af_dual = True
-    _adms_ext = '.ft1d'
 
     _SG_RE = re.compile(r"(?P<sign>[-+NESW]?)(?P<d>[\d]+)[\s\.,]*"
                         r"(?P<m>[\d]*)[\s\']*(?P<s>[\d]*)")
@@ -878,7 +900,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
               "every 2 minutes", "every 3 minutes", "every 4 minutes",
               "every 5 minutes", "every 6 minutes", "every 7 minutes",
               "every 8 minutes", "every 9 minutes", "every 10 minutes")
-    _BEEP_SELECT = ("Off", "Key+Scan", "Key")
     _SQUELCH = ["%d" % x for x in range(0, 16)]
     _VOLUME = ["%d" % x for x in range(0, 33)]
     _DG_ID = ["%d" % x for x in range(0, 100)]
@@ -889,11 +910,22 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         list(string.digits) + ['-', '/']
 
     @classmethod
-    def match_model(cls, filedata, filename):
-        if filename.endswith(cls._adms_ext):
-            return True
-        else:
-            return super().match_model(filedata, filename)
+    def match_model(cls, filedata: bytearray, filename: str) -> bool:
+        ''' Both ADMS and sd-card files may have ADMS internal IDs '''
+        # ADMS file
+        if filename.lower().endswith(cls._adms_ext):
+            if cls._adms_ID in filedata:
+                return True
+        # sd-card BACKUP.dat file
+        elif filename.endswith(cls._sdcd_ext):
+            if cls._adms_ID in filedata:
+                return True
+            if cls._model in filedata:
+                return True
+            # FT-1D has NO _model in sd-card file
+            if b'AH' not in filedata:
+                return True
+        return super().match_model(filedata, filename)
 
     @classmethod
     def get_prompts(cls):
@@ -2532,24 +2564,40 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         setattr(obj, "lon_dec_sec", val)
 
     def load_mmap(self, filename):
+        """ Read raw image from file """
+        # ADMS file: .ft?d
         if filename.lower().endswith(self._adms_ext):
             with open(filename, 'rb') as f:
-                self._adms_header = f.read(0x16)
+                self._adms_header = f.read(self._adms_head_len)
                 LOG.debug('ADMS Header:\n%s',
                           util.hexprint(self._adms_header))
                 self._mmap = memmap.MemoryMapBytes(self._model + f.read())
-                LOG.info('Loaded ADMS file')
+            LOG.info('Loaded ADMS file')
+            self.process_mmap()
+        elif filename.endswith(self._sdcd_ext):
+            with open(filename, 'rb') as f:
+                self._mmap = memmap.MemoryMapBytes(self._model_hd + f.read())
+            LOG.info('Loaded sd-card file')
             self.process_mmap()
         else:
-            chirp_common.CloneModeRadio.load_mmap(self, filename)
+            super().load_mmap(filename)
 
     def save_mmap(self, filename):
+        """ Write memory image to file,  """
+        # ADMS files
         if filename.lower().endswith(self._adms_ext):
             if not hasattr(self, '_adms_header'):
                 raise Exception('Unable to save .img to %s' % self._adms_ext)
             with open(filename, 'wb') as f:
                 f.write(self._adms_header)
                 f.write(self._mmap.get_packed()[5:])
-                LOG.info('Wrote file')
+                LOG.info('Wrote ADMS file')
+        # sd-card files
+        elif filename.endswith(self._sdcd_ext):
+            # if not hasattr(self, '_sdcd_header'):
+            #    raise Exception('Unable to save .img to %s' % self._sdcd_ext)
+            with open(filename, 'wb') as f:
+                #    f.write(self._sdcd_header)
+                f.write(self._mmap.get_packed())
         else:
-            chirp_common.CloneModeRadio.save_mmap(self, filename)
+            super().save_mmap(filename)
