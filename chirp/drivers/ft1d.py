@@ -2598,6 +2598,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             #    raise Exception('Unable to save .img to %s' % self._sdcd_ext)
             with open(filename, 'wb') as f:
                 #    f.write(self._sdcd_header)
-                f.write(self._mmap.get_packed())
+                f.write(self._mmap.get_packed()[10:])
         else:
             super().save_mmap(filename)
