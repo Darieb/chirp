@@ -1,6 +1,6 @@
 # Copyright 2010 Dan Smith <dsmith@danplanet.com>
 # Copyright 2014 Angus Ainslie <angus@akkea.ca>
-# Copyright 2023,2025 Declan Rieb <WD5EQY@arrl.net>
+# Copyright 2023-2026 Declan Rieb <WD5EQY@arrl.net>
 # Sections of digital settings applied from ft70.py, thus
 # Copyright 2017 Nicolas Pike <nick@zbm2.com>
 #
@@ -200,7 +200,7 @@ struct flagslot {
      unknown:3,
      pskip:1,
      skip:1,
-     used:1,
+     used:1,        // used = NOT masked
      valid:1;
 };
 
@@ -224,12 +224,14 @@ struct memslot {
      tone:6;
   u8 unknown6:1,
      dcs:7;
-  u16 unknown7;
+  u8 unknown7;
+  u8 meterlevel;
   u8 unknown8:2,
      att:1,
      autostep:1,
      automode:1,
-     unknown9:3;
+     unknown9:2,
+     bell:1;
 };
 
 // Memory       n.b., Unneeded for FTM-3200 and FTM-7250, but needs memslot
@@ -539,6 +541,7 @@ POWER_LEVELS = [chirp_common.PowerLevel("Hi", watts=5.00),
                 chirp_common.PowerLevel("L3", watts=2.50),
                 chirp_common.PowerLevel("L2", watts=1.00),
                 chirp_common.PowerLevel("L1", watts=0.05)]
+METER_LEVELS = ['Off'] + [f'Level {i + 1}' for i in range(10)]
 SKIPNAMES = ["Skip%i" % i for i in range(901, 1000)]
 PMSNAMES = ["%s%i" % (c, i) for i in range(1, 51) for c in ['L', 'U']]
 HOMENAMES = ["Home%i" % i for i in range(1, 12)]
@@ -1040,8 +1043,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         if _flag is not None:
             mem.skip = _flag.pskip and "P" or _flag.skip and "S" or ""
             mem.empty = False
-            if not _flag.used:
-                mem.empty = True
             if not _flag.valid:
                 mem.empty = True
         if mem.empty:
@@ -1053,25 +1054,63 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             mem.tuning_step = STEPS[0]
         else:
             mem.freq = chirp_common.fix_rounded_step(int(_mem.freq) * 1000)
-            mem.offset = int(_mem.offset) * 1000
             mem.rtone = mem.ctone = chirp_common.TONES[_mem.tone]
             self._get_tmode(mem, _mem)
             mem.duplex = DUPLEX[_mem.duplex] if _mem.duplex else ""
             if mem.duplex == "split":
                 mem.offset = chirp_common.fix_rounded_step(mem.offset)
+            else:
+                mem.offset = int(_mem.offset) * 1000
             mem.mode = self._decode_mode(_mem)
             mem.dtcs = chirp_common.DTCS_CODES[_mem.dcs]
             mem.tuning_step = STEPS[_mem.tune_step]
             mem.power = self._decode_power_level(_mem)
-            self._get_mem_extra(mem, _mem)
+            self._get_mem_extra(mem, _mem, _flag)
+            if _flag is not None and not _flag.used:
+                # Make Masked entry mostly immutable
+                mem.immutable += ['freq', 'name', 'power', 'empty', 'number',
+                                  'extd_number', 'skip', 'offset', 'mode',
+                                  'tuning_step', 'tmode', 'dtcs', 'duplex',
+                                  'tone']
         return mem
 
-    def _get_mem_extra(self, mem, _mem):
+    def _get_mem_extra(self, mem, _mem, _flag):
         mem.extra = RadioSettingGroup('Extra', 'extra')
 
         ams = _mem.digmode == 1
         rs = RadioSetting('ysf_ams', 'AMS mode',
                           RadioSettingValueBoolean(ams))
+        mem.extra.append(rs)
+
+        rs = RadioSetting('att', 'ATT',
+                          RadioSettingValueBoolean(_mem.att))
+        mem.extra.append(rs)
+
+        rs = RadioSetting('automode', 'Auto',
+                          RadioSettingValueBoolean(_mem.automode))
+        mem.extra.append(rs)
+
+        rs = RadioSetting('clock_shift', 'Clock Shift',
+                          RadioSettingValueBoolean(_mem.clock_shift))
+        mem.extra.append(rs)
+
+        if _flag is None:
+            # True for Home array
+            rsvb = RadioSettingValueBoolean(False)
+            rsvb.set_mutable(False)
+        else:
+            rsvb = RadioSettingValueBoolean(not bool(_flag.used))
+        rs = RadioSetting('used', 'Mask', rsvb)
+
+        mem.extra.append(rs)
+
+        rs = RadioSetting('bell', 'Bell',
+                          RadioSettingValueBoolean(_mem.bell))
+        mem.extra.append(rs)
+
+        rs = RadioSetting('meterlevel', 'S-meter Level',
+                          RadioSettingValueList(
+                              METER_LEVELS, current_index=_mem. meterlevel))
         mem.extra.append(rs)
 
     def _set_mem_extra(self, mem, _mem):
@@ -1178,8 +1217,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
                                                             mem.extd_number)
         if mem.empty:
             self._wipe_memory(_mem)
-            if flag is not None:
-                flag.used = False
             return
         _mem.power = self._encode_power_level(mem)
         _mem.tone = chirp_common.TONES.index(mem.rtone)
@@ -1202,7 +1239,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         if regtype != "Home":
             self._debank(mem)
             ndx = num - 1
-            flag.used = not mem.empty
             flag.valid = True
             flag.skip = mem.skip == "S"
             flag.pskip = mem.skip == "P"
@@ -1325,7 +1361,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         menu.append(rs)
 
         val = RadioSettingValueList(self._MY_SYMBOL,
-                                    current_index=aprs.selected_my_symbol)
+                                    rcurrent_index=aprs.selected_my_symbol)
         rs = RadioSetting("aprs.selected_my_symbol", "My Symbol", val)
         menu.append(rs)
 
