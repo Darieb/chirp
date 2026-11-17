@@ -24,7 +24,8 @@ import logging
 from chirp.drivers import yaesu_clone
 from chirp import chirp_common, directory, bitwise
 from chirp import memmap
-from chirp.settings import RadioSettingGroup, RadioSetting, RadioSettings, \
+from chirp.settings import RadioSettingGroup, RadioSetting, \
+            MemSetting, RadioSettings, \
             RadioSettingValueInteger, RadioSettingValueString, \
             RadioSettingValueList, RadioSettingValueBoolean, \
             InvalidValueError, RadioSettingSubGroup
@@ -739,6 +740,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     _has_af_dual = True
     _adms_ext = '.ft1d'
 
+    _extra_settings = []
     _SG_RE = re.compile(r"(?P<sign>[-+NESW]?)(?P<d>[\d]+)[\s\.,]*"
                         r"(?P<m>[\d]*)[\s\']*(?P<s>[\d]*)")
 
@@ -766,6 +768,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
     _SMARTBEACON_PROFILE = ("Off", "Type 1", "Type 2", "Type 3")
     _BEACON_INT = ("30s", "1m", "2m", "3m", "5m", "10m", "15m",
                    "20m", "30m", "60m")
+    _DIGITAL_MODES = ['Off', 'AMS', 'DN']
     _DIGI_PATHS = ("OFF", "WIDE1-1", "WIDE1-1, WIDE2-1", "Digi Path 4",
                    "Digi Path 5", "Digi Path 6", "Digi Path 7", "Digi Path 8")
     _MSG_GROUP_NAMES = ("Message Group 1", "Message Group 2",
@@ -1076,22 +1079,22 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
 
     def _get_mem_extra(self, mem, _mem, _flag):
         mem.extra = RadioSettingGroup('Extra', 'extra')
-
-        ams = _mem.digmode == 1
-        rs = RadioSetting('ysf_ams', 'AMS mode',
-                          RadioSettingValueBoolean(ams))
+        rs = MemSetting('digmode', 'AMS mode',
+                        RadioSettingValueList(
+                            self._DIGITAL_MODES,
+                            current_index=_mem.digmode))
         mem.extra.append(rs)
 
-        rs = RadioSetting('att', 'ATT',
-                          RadioSettingValueBoolean(_mem.att))
+        rs = MemSetting('att', 'ATT',
+                        RadioSettingValueBoolean(_mem.att))
         mem.extra.append(rs)
 
-        rs = RadioSetting('automode', 'Auto',
-                          RadioSettingValueBoolean(_mem.automode))
+        rs = MemSetting('automode', 'Auto',
+                        RadioSettingValueBoolean(_mem.automode))
         mem.extra.append(rs)
 
-        rs = RadioSetting('clock_shift', 'Clock Shift',
-                          RadioSettingValueBoolean(_mem.clock_shift))
+        rs = MemSetting('clock_shift', 'Clock Shift',
+                        RadioSettingValueBoolean(_mem.clock_shift))
         mem.extra.append(rs)
 
         if _flag is None:
@@ -1101,27 +1104,35 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         else:
             rsvb = RadioSettingValueBoolean(not bool(_flag.used))
         rs = RadioSetting('used', 'Mask', rsvb)
-
         mem.extra.append(rs)
 
-        rs = RadioSetting('bell', 'Bell',
-                          RadioSettingValueBoolean(_mem.bell))
+        rs = MemSetting('bell', 'Bell',
+                        RadioSettingValueBoolean(_mem.bell))
         mem.extra.append(rs)
 
-        rs = RadioSetting('meterlevel', 'S-meter Level',
-                          RadioSettingValueList(
-                              METER_LEVELS, current_index=_mem. meterlevel))
+        rs = MemSetting('meterlevel', 'S-meter Level',
+                        RadioSettingValueList(
+                            METER_LEVELS,
+                            current_index=_mem.meterlevel))
         mem.extra.append(rs)
 
     def _set_mem_extra(self, mem, _mem):
-        if 'ysf_ams' in mem.extra:
-            # We only set AMS if the memory mode is DN. If it is FM,
-            # then that takes precedence as "analog-only".
-            if mem.mode == 'DN':
-                orig = int(_mem.digmode)
-                _mem.digmode = int(mem.extra['ysf_ams'].value) and 1 or 2
-                LOG.debug('Changed digmode from %i to %i' % (
-                    orig, _mem.digmode))
+        if mem.extra:
+            mem.extra['bell'].apply_to_memobj(_mem)
+            mem.extra['meterlevel'].apply_to_memobj(_mem)
+            mem.extra['clock_shift'].apply_to_memobj(_mem)
+            mem.extra['automode'].apply_to_memobj(_mem)
+            mem.extra['att'].apply_to_memobj(_mem)
+            mem.extra['digmode'].apply_to_memobj(_mem)
+            mem.extra['att'].apply_to_memobj(_mem)
+        # if 'ysf_ams' in nonMemSet:
+        #    # We only set AMS if the memory mode is DN. If it is FM,
+        #    # then that takes precedence as "analog-only".
+        #    if mem.mode == 'DN':
+        #        orig = int(_mem.digmode)
+        #        _mem.digmode = int(mem.extra['ysf_ams'].value) and 1 or 2
+        #        LOG.debug('Changed digmode from %i to %i' % (
+        #            orig, _mem.digmode))
 
     def _decode_label(self, mem):
         charset = ''.join(CHARSET).ljust(256, '.')
@@ -2442,7 +2453,8 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
 
     def set_settings(self, settings):
         _mem = self._memobj
-        for element in settings:
+        nonMemSet = settings.apply_to(_mem)
+        for element in nonMemSet:
             if not isinstance(element, RadioSetting):
                 self.set_settings(element)
                 continue
