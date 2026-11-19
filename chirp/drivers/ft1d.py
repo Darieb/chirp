@@ -201,7 +201,7 @@ struct flagslot {
      unknown:3,
      pskip:1,
      skip:1,
-     used:1,        // used = NOT masked
+     used:1,        // used = NOT MASKed; ADMS makes MASKed entry immutable
      valid:1;
 };
 
@@ -1068,12 +1068,6 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
             mem.tuning_step = STEPS[_mem.tune_step]
             mem.power = self._decode_power_level(_mem)
             self._get_mem_extra(mem, _mem, _flag)
-            if _flag is not None and not _flag.used:
-                # Make Masked entry mostly immutable
-                mem.immutable += ['freq', 'name', 'power', 'empty', 'number',
-                                  'extd_number', 'skip', 'offset', 'mode',
-                                  'tuning_step', 'tmode', 'dtcs', 'duplex',
-                                  'tone']
         return mem
 
     def _get_mem_extra(self, mem, _mem, _flag):
@@ -1366,7 +1360,7 @@ class FT1Radio(yaesu_clone.YaesuCloneModeRadio):
         menu.append(rs)
 
         val = RadioSettingValueList(self._MY_SYMBOL,
-                                    rcurrent_index=aprs.selected_my_symbol)
+                                    current_index=aprs.selected_my_symbol)
         rs = RadioSetting("aprs.selected_my_symbol", "My Symbol", val)
         menu.append(rs)
 
